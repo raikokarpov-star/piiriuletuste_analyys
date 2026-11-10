@@ -4,6 +4,8 @@ import io
 import time
 import numpy as np
 
+st.info("DIAGNOSTIKA 1: Ülevaateleht käivitus")
+
 # ---------------------------------
 # LEHE SEADISTUSED
 # ---------------------------------
