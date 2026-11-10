@@ -3,8 +3,13 @@ import pandas as pd
 import io
 import time
 import numpy as np
+import psutil
 
-st.info("DIAGNOSTIKA 1: Ülevaateleht käivitus")
+def kuva_malukasuts():
+    protsess = psutil.Process()
+    malumaht = protsess.memory_info().rss / (1024 ** 2)
+
+    st.info(f"RAM kasutus: {malumaht:.1f} MB")
 
 # ---------------------------------
 # LEHE SEADISTUSED
@@ -37,8 +42,8 @@ def lae_andmed():
 
 df = lae_andmed()
 
-st.write("Andmestiku mõõtmed:", df.shape)
-st.write("Mälu kasutus:", round(df.memory_usage(deep=True).sum() / 1024**2, 2), "MB")
+st.subheader("Mälu diagnostika")
+kuva_malukasuts()
 
 # ---------------------------------
 # RIIKLIKUD PROGNOOSID: A7 JA A9
@@ -250,6 +255,9 @@ with col4:
         )
 
 st.write("Filtreeritud andmestiku mõõtmed:", filtreeritud.shape)
+
+st.write("RAM pärast filtreerimist:")
+kuva_malukasuts()
 
 # ---------------------------------
 # AJALINE ANALÜÜS
