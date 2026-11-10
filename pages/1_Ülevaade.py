@@ -85,25 +85,48 @@ piiri_tyyp = st.sidebar.selectbox(
 # Piiripunktide valik vastavalt tüübile
 # Piiripunktide valik vastavalt tüübile
 
-# Jätame merepiiri vahemällu, kuna see ei ole seotud maismaa ja õhupiiridega
+# Loome väikese piiripunktide valikutabeli
 @st.cache_data
-def loo_maismaa_ja_ohu(df):
+def loo_punktide_valikud(df):
     return df[
-        df["Piiripunkti tüüp"].isin(
-            ["Maismaapiir", "Õhupiir"]
-        )
-    ].copy()
+        ["Piiripunkti tüüp", "Piiripunkt"]
+    ].drop_duplicates()
 
-maismaa_ja_ohu = loo_maismaa_ja_ohu(df)
+punktide_valikud = loo_punktide_valikud(df)
 
 if piiri_tyyp == "Kõik":
     punktid = sorted(
-        maismaa_ja_ohu["Piiripunkt"].dropna().unique()
+        punktide_valikud.loc[
+            punktide_valikud["Piiripunkti tüüp"].isin(
+                ["Maismaapiir", "Õhupiir"]
+            ),
+            "Piiripunkt"
+        ].dropna().unique()
     )
 else:
     punktid = sorted(
-        maismaa_ja_ohu.loc[
-            maismaa_ja_ohu["Piiripunkti tüüp"] == piiri_tyyp,
+        punktide_valikud.loc[
+            punktide_valikud["Piiripunkti tüüp"] == piiri_tyyp,
+            "Piiripunkt"
+        ].dropna().unique()
+    )
+
+st.write("RAM pärast piiripunktide valikutabelit:")
+kuva_malukasuts()
+
+if piiri_tyyp == "Kõik":
+    punktid = sorted(
+        punktide_valikud.loc[
+            punktide_valikud["Piiripunkti tüüp"].isin(
+                ["Maismaapiir", "Õhupiir"]
+            ),
+            "Piiripunkt"
+        ].dropna().unique()
+    )
+else:
+    punktid = sorted(
+        punktide_valikud.loc[
+            punktide_valikud["Piiripunkti tüüp"] == piiri_tyyp,
             "Piiripunkt"
         ].dropna().unique()
     )
@@ -114,9 +137,19 @@ valitud_punktid = st.sidebar.multiselect(
     default=punktid
 )
 
-# Aastad
-aastad = sorted(df["aasta"].unique()
-)
+# ---------------------------------
+# PIIRIPUNKTIDE VALIKUD
+# ---------------------------------
+
+punktide_valikud = df[
+    ["Piiripunkti tüüp", "Piiripunkt"]
+].drop_duplicates()
+
+# ---------------------------------
+# AASTAD
+# ---------------------------------
+
+aastad = sorted(df["aasta"].unique())
 
 valitud_aastad = st.sidebar.multiselect(
     "Aasta",
@@ -124,7 +157,10 @@ valitud_aastad = st.sidebar.multiselect(
     default=aastad
 )
 
-# Kuud
+# ---------------------------------
+# KUUD
+# ---------------------------------
+
 kuud = list(range(1, 13))
 
 valitud_kuud = st.sidebar.multiselect(
@@ -133,7 +169,10 @@ valitud_kuud = st.sidebar.multiselect(
     default=kuud
 )
 
-# Kodakondsuse filter
+# ---------------------------------
+# KODAKONDSUSED
+# ---------------------------------
+
 kodakondsused = sorted(
     df["Kodakondsus"].dropna().unique()
 )
@@ -144,7 +183,10 @@ valitud_kodakondsused = st.sidebar.multiselect(
     default=kodakondsused
 )
 
-# Vanuserühma filter
+# ---------------------------------
+# VANUSERÜHMAD
+# ---------------------------------
+
 vanuseruhmad = sorted(
     df["Vanuserühm"].dropna().unique()
 )
@@ -155,7 +197,10 @@ valitud_vanuseruhmad = st.sidebar.multiselect(
     default=vanuseruhmad
 )
 
-# Riikide gruppide filter
+# ---------------------------------
+# RIIKIDE GRUPID
+# ---------------------------------
+
 riikide_grupid = sorted(
     df["Riikide grupp"].dropna().unique()
 )
