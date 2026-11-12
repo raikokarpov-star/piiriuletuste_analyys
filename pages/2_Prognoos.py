@@ -72,7 +72,10 @@ for piiripunkt, grupp in piirangud.groupby("Piiripunkt"):
             })
 
 
-algused_df = pd.DataFrame(algused)
+algused_df = pd.DataFrame(
+    algused,
+    columns=["Kuupäev", "Piiripunkt", "Tunnus"]
+)
 
 # ---------------------------------
 # VALGA PIIRIPUNKTIDE KOONDAMINE
