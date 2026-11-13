@@ -162,10 +162,25 @@ leht = st.navigation(
             default=True
         ),
         st.Page(
+            "pages/3_Sugu_ja_vanuseruhmad.py",
+            title="Sugu ja vanuserühmad",
+            icon="👥"
+        ),
+        st.Page(
+            "pages/4_Ohupiir_ja_maismaapiir.py",
+            title="Õhupiir vs maismaapiir",
+            icon="✈️"
+        ),
+        st.Page(
+            "pages/5_Hooajalisus.py",
+            title="Hooajalisus",
+            icon="📅"
+        ),
+        st.Page(
             "pages/2_Prognoos.py",
             title="Prognoos",
             icon="📈"
-        )
+        ),
     ]
 )
 
