@@ -397,14 +397,15 @@ tegelikud_soo_andmed = tegelikud_soo_andmed[
     & (tegelikud_soo_andmed["Riikide grupp"] != "Puudub")
 ].copy()
 
+
 tegelikud_soo_andmed["Naiste osakaal (%)"] = (
-    tegelikud_soo_andmed["Naiste_arv"]
+    pd.to_numeric(tegelikud_soo_andmed["Naiste_arv"])
     / tegelikud_soo_andmed["Koguarv"]
     * 100
 )
 
 tegelikud_soo_andmed["Meeste osakaal (%)"] = (
-    tegelikud_soo_andmed["Meeste_arv"]
+    pd.to_numeric(tegelikud_soo_andmed["Meeste_arv"])
     / tegelikud_soo_andmed["Koguarv"]
     * 100
 )
