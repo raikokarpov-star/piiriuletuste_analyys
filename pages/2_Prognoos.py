@@ -3,15 +3,12 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
+from utils import lae_andmed
+
 # ---------------------------------
 # LEHE SEADISTUSED
 # ---------------------------------
 
-st.set_page_config(
-    page_title="Piiriületuste prognoos",
-    page_icon="📈",
-    layout="wide"
-)
 
 st.title("Eesti piiriületuste prognoos")
 st.caption("Riiklik prognoos ja ajalooliste tulemuste võrdlus")
@@ -23,11 +20,6 @@ st.caption("Riiklik prognoos ja ajalooliste tulemuste võrdlus")
 @st.cache_data
 def lae_piirangute_andmed():
     return pd.read_parquet("piiripunktide_kuud.parquet")
-
-
-@st.cache_data
-def lae_andmed():
-    return pd.read_parquet("piiriuletused.parquet")
 
 
 piirangud = lae_piirangute_andmed()
