@@ -391,6 +391,6 @@ fig_piir.update_traces(
 
 st.plotly_chart(
     fig_piir,
-    use_container_width=True,
+    width="stretch",
     key="ohu_maismaa_vordlus"
 )

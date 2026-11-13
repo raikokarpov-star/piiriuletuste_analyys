@@ -359,7 +359,7 @@ fig_aastad.update_layout(
 
 st.plotly_chart(
     fig_aastad,
-    use_container_width=True,
+    width="stretch",
     key="piiripunktide_vordlus"
 )
 
@@ -654,7 +654,7 @@ def loo_soo_osakaalu_graafik(sugu, osakaalu_veerg, pealkiri, graafiku_voti):
 
     st.plotly_chart(
         fig,
-        use_container_width=True,
+        width="stretch",
         key=graafiku_voti
     )
 
@@ -1123,6 +1123,6 @@ for algus in range(0, len(diagrammid), 3):
 
             st.plotly_chart(
                             fig,
-                            use_container_width=True,
+                            width="stretch",
                             key=f"liblika_{algus}_{kodakondsus}"
                         )

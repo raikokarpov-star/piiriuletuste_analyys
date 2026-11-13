@@ -392,7 +392,7 @@ fig.update_layout(
 
 st.plotly_chart(
     fig,
-    use_container_width=True,
+    width="stretch",
     key="piiriuletuste_ajagraafik"
 )
 
@@ -642,7 +642,7 @@ fig_schengeni_kontroll.update_xaxes(
 
 st.plotly_chart(
     fig_schengeni_kontroll,
-    use_container_width=True
+    width="stretch"
 )
 
 st.markdown(
@@ -710,7 +710,7 @@ st.download_button(
     data=loo_excel,
     file_name="eesti_piiriuletuste_analuus.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True
+    width="stretch"
 )
 
 # ---------------------------------
@@ -730,5 +730,5 @@ st.download_button(
     data=csv_andmed,
     file_name="eesti_piiriuletuste_algandmed.csv",
     mime="text/csv",
-    use_container_width=True
+    width="stretch"
 )

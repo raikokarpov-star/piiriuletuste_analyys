@@ -3,8 +3,6 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-from utils import lae_andmed
-
 # ---------------------------------
 # LEHE SEADISTUSED
 # ---------------------------------
@@ -23,7 +21,15 @@ def lae_piirangute_andmed():
 
 
 piirangud = lae_piirangute_andmed()
-df = lae_andmed()
+df = st.session_state["andmed_df"]
+
+piiri_tyyp = st.session_state["piiri_tyyp"]
+valitud_punktid = st.session_state["valitud_punktid"]
+valitud_aastad = st.session_state["valitud_aastad"]
+valitud_kuud = st.session_state["valitud_kuud"]
+valitud_kodakondsused = st.session_state["valitud_kodakondsused"]
+valitud_vanuseruhmad = st.session_state["valitud_vanuseruhmad"]
+valitud_riikide_grupid = st.session_state["valitud_riikide_grupid"]
 
 piirangud["Kuupäev"] = pd.to_datetime(
     piirangud["Kuupäev"]
@@ -43,7 +49,9 @@ tunnused = {
 
 algused = []
 
-for piiripunkt, grupp in piirangud.groupby("Piiripunkt"):
+for piiripunkt, grupp in piirangud[
+    piirangud["Piiripunkt"].isin(valitud_punktid)
+].groupby("Piiripunkt"):
 
     grupp = grupp.sort_values("Kuupäev")
 
@@ -87,8 +95,6 @@ algused_df = algused_df.drop_duplicates(
 )
 
 
-
-
 # ---------------------------------
 # PROGNOOSID
 # ---------------------------------
@@ -119,10 +125,19 @@ df["Piiriületuse kpv"] = pd.to_datetime(
     df["Piiriületuse kpv"]
 )
 
+if piiri_tyyp == "Kõik":
+    valitud_tyypide_nimekiri = ["Maismaapiir", "Õhupiir"]
+else:
+    valitud_tyypide_nimekiri = [piiri_tyyp]
+
 ajalugu = df[
-    df["Piiripunkti tüüp"].isin(
-        ["Maismaapiir", "Õhupiir"]
-    )
+    df["Piiripunkti tüüp"].isin(valitud_tyypide_nimekiri)
+    & df["Piiripunkt"].isin(valitud_punktid)
+    & df["aasta"].isin(valitud_aastad)
+    & df["kuu"].isin(valitud_kuud)
+    & df["Kodakondsus"].isin(valitud_kodakondsused)
+    & df["Vanuserühm"].isin(valitud_vanuseruhmad)
+    & df["Riikide grupp"].isin(valitud_riikide_grupid)
     & (df["Piiriületuse kpv"] < "2026-11-01")
 ].copy()
 
@@ -256,34 +271,11 @@ for i, (_, rida) in enumerate(algused_df.iterrows()):
         borderpad=4
     )
 
-    fig.add_annotation(
-        x=rida["Kuupäev"],
-        y=y_asukoht,
-        xref="x",
-        yref="paper",
-        text=(
-            f"↓ {nimetused[rida['Tunnus']]}<br>"
-            f"{rida['Piiripunkt'].replace(' piiripunkt', '')}"
-        ),
-        showarrow=True,
-        arrowhead=2,
-        arrowsize=1,
-        arrowwidth=1.5,
-        arrowcolor="#178939",
-        ax=0,
-        ay=-35,
-        font=dict(size=10, color="black"),
-        bgcolor="rgba(255, 255, 255, 0.35)",
-        bordercolor="#178939",
-        borderwidth=1,
-        borderpad=4
-    )
-
 # ---------------------------------
 # GRAAFIKU KUVAMINE
 # ---------------------------------
 
 st.plotly_chart(
     fig,
-    use_container_width=True
+    width="stretch"
 )
