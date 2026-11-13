@@ -260,7 +260,7 @@ else:
         with veerg:
             st.plotly_chart(
                 fig_hooajalisus,
-                use_container_width=True,
+                width="stretch",
                 key=f"hooajalisuse_graafik_{aasta}"
 )
 
@@ -287,6 +287,6 @@ st.dataframe(
             "Stabiliseeritud indeks"
         ]
     ],
-    use_container_width=True,
+    width="stretch",
     hide_index=True
 )
