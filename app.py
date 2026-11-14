@@ -64,7 +64,10 @@ else:
     )
 
 # Piiripunkti tüübi muutmisel uuendame automaatselt valiku
-if st.session_state.get("eelmine_piiri_tyyp") != piiri_tyyp:
+if (
+    st.session_state.get("eelmine_piiri_tyyp") != piiri_tyyp
+    or not st.session_state.get("valitud_punktid")
+):
     st.session_state["valitud_punktid"] = punktid
     st.session_state["eelmine_piiri_tyyp"] = piiri_tyyp
 

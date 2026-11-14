@@ -104,6 +104,11 @@ scatter_andmed["Kuupäev"] = pd.to_datetime(
     )
 )
 
+# Sorteerime andmed ajalisse järjekorda
+scatter_andmed = scatter_andmed.sort_values(
+    ["Seeria", "Kuupäev"]
+)
+
 # ---------------------------------
 # PROGNOOSANDMED SOO JÄRGI
 # ---------------------------------
@@ -187,7 +192,7 @@ varvid = {
 }
 
 
-fig_aastad = px.scatter(
+fig_aastad = px.line(
     scatter_andmed,
     x="Kuupäev",
     y="Osakaal (%)",
@@ -307,17 +312,14 @@ for seeria in ["Mehed", "Naised"]:
             go.Scatter(
                 x=x,
                 y=y,
-                mode="lines+markers",
+                mode="lines",
                 name=f"{seeria} – {mudel} prognoos",
                 line=dict(
                     color=prognoosi_varvid[seeria],
                     width=3,
                     dash=prognoosi_stiilid[mudel]
                 ),
-                marker=dict(
-                    size=6,
-                    symbol="diamond" if mudel == "A7" else "square"
-                ),
+                showlegend=False,
                 hovertemplate=(
                     "%{x|%Y-%m}<br>"
                     "Prognoos: %{y:.2f}%"
@@ -494,7 +496,7 @@ def loo_soo_osakaalu_graafik(sugu, osakaalu_veerg, pealkiri, graafiku_voti):
     tegelikud_andmed = tegelikud_andmed.sort_values(
         ["Riikide grupp", "Kuupäev"]
     )
-# -----------------------------
+    # -----------------------------
     # TEGELIKUD ANDMED
     # -----------------------------
 
@@ -514,7 +516,7 @@ def loo_soo_osakaalu_graafik(sugu, osakaalu_veerg, pealkiri, graafiku_voti):
         x="Kuupäev",
         y=osakaalu_veerg,
         color="Riikide grupp",
-        markers=True,
+        markers=False,
         title=pealkiri,
         labels={
             "Kuupäev": "Aeg",
@@ -604,16 +606,13 @@ def loo_soo_osakaalu_graafik(sugu, osakaalu_veerg, pealkiri, graafiku_voti):
                 go.Scatter(
                     x=x,
                     y=y,
-                    mode="lines+markers",
+                    mode="lines",
                     name=f"{grupp} – {mudel} prognoos",
+                    showlegend=False,
                     line=dict(
                         color=grupi_varvid.get(grupp),
                         width=2.5,
                         dash="dash" if mudel == "A7" else "dot"
-                    ),
-                    marker=dict(
-                        size=6,
-                        symbol="diamond" if mudel == "A7" else "square"
                     ),
                     hovertemplate=(
                         "%{x|%Y-%m}<br>"

@@ -331,6 +331,21 @@ graafiku_andmed = pd.concat(
 )
 
 # ---------------------------------
+# TOP 5 PIIRIPUNKTI
+# ---------------------------------
+
+top5_piiripunktid = (
+    graafiku_andmed.loc[
+        graafiku_andmed["Stsenaarium"] == "Tegelik"
+    ]
+    .groupby("Piiripunkt")["Piiriületuste arv"]
+    .sum()
+    .nlargest(5)
+    .index
+    .tolist()
+)
+
+# ---------------------------------
 # JOONDIAGRAMM
 # ---------------------------------
 
@@ -343,18 +358,12 @@ fig = px.line(
     y="Piiriületuste arv",
     color="Piiripunkt",
     line_dash="Stsenaarium",
-    symbol="Stsenaarium",
-    markers=True,
+    markers=False,
     title="Piiriületused kuude lõikes",
     line_dash_map={
         "Tegelik": "solid",
         "A7 prognoos": "dash",
         "A9 prognoos": "dot"
-    },
-    symbol_map={
-        "Tegelik": "circle",
-        "A7 prognoos": "diamond",
-        "A9 prognoos": "square"
     }
 )
 
@@ -379,25 +388,51 @@ for trace in fig.data:
 
     if varv:
         trace.line.color = varv
-        trace.marker.color = varv
+
+    # Kõik sama piiripunkti jooned kuuluvad ühte gruppi
+    trace.legendgroup = piiripunkt
+
+    # Legendis näitame ainult TOP 5 tegelikke piiripunkte
+    trace.showlegend = (
+        piiripunkt in top5_piiripunktid
+        and trace.name.endswith(", Tegelik")
+    )
 
     if trace.name.endswith(", Tegelik"):
         trace.line.width = 2
-        trace.marker.size = 5
 
     elif trace.name.endswith(", A7 prognoos"):
         trace.line.width = 2.5
-        trace.marker.size = 6
 
     elif trace.name.endswith(", A9 prognoos"):
         trace.line.width = 2.5
-        trace.marker.size = 6
+
+import re
+
+for trace in fig.data:
+    trace.name = re.sub(
+        r"\s+piiripunkt\b",
+        "",
+        trace.name,
+        flags=re.IGNORECASE
+    )
 
 fig.update_layout(
     xaxis_title="Aeg",
     yaxis_title="Piiriületuste arv",
-    hovermode="x unified",
-    legend_title="Piiripunkt / stsenaarium"
+    hovermode="closest",
+    legend=dict(
+        orientation="h",
+        yanchor="top",
+        y=-0.3,
+        xanchor="center",
+        x=0.5,
+        title=None
+    ),
+
+    margin=dict(
+        b=150
+    )
 )
 
 st.plotly_chart(
