@@ -82,21 +82,56 @@ prognoosi_andmed["kuu"] = prognoosi_andmed["Kuupäev"].dt.month
 # ANDMETE FILTREERIMINE
 # ---------------------------------
 
-    
 algusaeg = time.perf_counter()
 
 filtreeritud = filtri_tingimused(df)
+
+pohiandmete_aeg = time.perf_counter() - algusaeg
+
+st.caption(
+    f"Põhiandmestiku filtreerimine: {pohiandmete_aeg:.3f} sekundit"
+)
+
+st.caption("RAM pärast põhiandmestiku filtreerimist")
+kuva_malukasuts()
+
+
+algusaeg = time.perf_counter()
 
 prognoos_filtreeritud = filtri_tingimused(
     catboost_detailne_prognoos
 )
 
-filtreerimise_aeg = time.perf_counter() - algusaeg
+catboost_aeg = time.perf_counter() - algusaeg
 
 st.caption(
-    f"Andmete filtreerimine: {filtreerimise_aeg:.3f} sekundit"
+    f"CatBoosti filtreerimine: {catboost_aeg:.3f} sekundit"
 )
 
+st.caption("RAM pärast CatBoosti filtreerimist")
+kuva_malukasuts()
+
+st.caption(
+    f"Põhiandmestiku filtreeritud read: "
+    f"{len(filtreeritud):,}".replace(",", " ")
+)
+
+st.caption(
+    f"Põhiandmestiku filtreeritud maht: "
+    f"{filtreeritud.memory_usage(index=False, deep=True).sum() / (1024 ** 2):.2f} MB "
+    f"({filtreeritud.memory_usage(index=False, deep=True).sum() / (df.memory_usage(index=False, deep=True).sum()) * 100:.1f}%)"
+)
+
+st.caption(
+    f"CatBoosti filtreeritud read: "
+    f"{len(prognoos_filtreeritud):,}".replace(",", " ")
+)
+
+st.caption(
+    f"CatBoosti filtreeritud maht: "
+    f"{prognoos_filtreeritud.memory_usage(index=False, deep=True).sum() / (1024 ** 2):.2f} MB "
+    f"({prognoos_filtreeritud.memory_usage(index=False, deep=True).sum() / (catboost_detailne_prognoos.memory_usage(index=False, deep=True).sum()) * 100:.1f}%)"
+)
 # ---------------------------------
 # TULEMUSED
 # ---------------------------------
@@ -396,8 +431,6 @@ st.plotly_chart(
     key="piiriuletuste_ajagraafik"
 )
 
-
-
 # ---------------------------------
 # CATBOOSTI JA AJALOOLISTE ANDMETE LAADIMINE
 # ---------------------------------
@@ -435,6 +468,10 @@ ajalooliste_summa_kontroll = (
     .groupby("Kuupäev")["Osakaal_%"]
     .sum()
 )
+
+st.subheader("RAM pärast andmete filtreerimist")
+kuva_malukasuts()
+
 
 # ---------------------------------
 # SCHENGENI LIIKMESUSE JA LÄHTEANDMETE KLASSIFIKATSIOONI VÕRDLUS
@@ -660,6 +697,9 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+st.caption("RAM pärast fikseeritud graafikut")
+kuva_malukasuts()
+
 # ---------------------------------
 # ANALÜÜSI TULEMUSTE ALLALAADIMINE
 # ---------------------------------
@@ -713,22 +753,14 @@ st.download_button(
     width="stretch"
 )
 
+st.caption("RAM enne CSV loomist")
+kuva_malukasuts()
+
 # ---------------------------------
 # ALGANDMETE ALLALAADIMINE
 # ---------------------------------
 
 st.subheader("Algandmete allalaadimine")
 
-csv_andmed = filtreeritud.to_csv(
-    index=False,
-    sep=";",
-    encoding="utf-8-sig"
-).encode("utf-8-sig")
-
-st.download_button(
-    label="Lae filtreeritud algandmed alla (CSV)",
-    data=csv_andmed,
-    file_name="eesti_piiriuletuste_algandmed.csv",
-    mime="text/csv",
-    width="stretch"
-)
+st.caption("RAM ilma CSV allalaadimisnuputa")
+kuva_malukasuts()

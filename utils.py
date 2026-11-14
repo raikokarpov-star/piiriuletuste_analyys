@@ -1,9 +1,6 @@
-
 import streamlit as st
 import pandas as pd
 
-
-@st.cache_data
 def lae_andmed():
 
     df = pd.read_parquet("piiriuletused.parquet")
@@ -32,13 +29,13 @@ def lae_catboost_detailne_prognoos():
         parse_dates=["Kuupäev"]
     )
 
-
 @st.cache_data
 def loo_punktide_valikud(df):
 
     return df[
         ["Piiripunkti tüüp", "Piiripunkt"]
     ].drop_duplicates()
+
 
 def filtri_tingimused(andmed, aasta_valik=None):
 
@@ -60,12 +57,15 @@ def filtri_tingimused(andmed, aasta_valik=None):
     else:
         valitud_tyypide_nimekiri = [piiri_tyyp]
 
-    return andmed[
-        (andmed["Piiripunkti tüüp"].isin(valitud_tyypide_nimekiri))
-        & (andmed["Piiripunkt"].isin(valitud_punktid))
-        & (andmed["aasta"].isin(aasta_valik))
-        & (andmed["kuu"].isin(valitud_kuud))
-        & (andmed["Kodakondsus"].isin(valitud_kodakondsused))
-        & (andmed["Riikide grupp"].isin(valitud_riikide_grupid))
-        & (andmed["Vanuserühm"].isin(valitud_vanuseruhmad))
-    ]
+    mask = andmed["Piiripunkti tüüp"].isin(
+        valitud_tyypide_nimekiri
+    )
+
+    mask &= andmed["Piiripunkt"].isin(valitud_punktid)
+    mask &= andmed["aasta"].isin(aasta_valik)
+    mask &= andmed["kuu"].isin(valitud_kuud)
+    mask &= andmed["Kodakondsus"].isin(valitud_kodakondsused)
+    mask &= andmed["Riikide grupp"].isin(valitud_riikide_grupid)
+    mask &= andmed["Vanuserühm"].isin(valitud_vanuseruhmad)
+
+    return andmed.loc[mask]
