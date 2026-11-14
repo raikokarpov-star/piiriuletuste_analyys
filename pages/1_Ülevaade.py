@@ -9,13 +9,6 @@ import psutil
 from utils import filtri_tingimused
 
 
-def kuva_malukasuts():
-    protsess = psutil.Process()
-    malumaht = protsess.memory_info().rss / (1024 ** 2)
-
-    st.info(f"RAM kasutus: {malumaht:.1f} MB")
-
-
 # ---------------------------------
 # LEHE SEADISTUSED
 # ---------------------------------
@@ -42,10 +35,6 @@ valitud_kuud = st.session_state["valitud_kuud"]
 valitud_kodakondsused = st.session_state["valitud_kodakondsused"]
 valitud_vanuseruhmad = st.session_state["valitud_vanuseruhmad"]
 valitud_riikide_grupid = st.session_state["valitud_riikide_grupid"]
-
-
-st.subheader("Mälu diagnostika")
-kuva_malukasuts()
 
 
 # ---------------------------------
@@ -88,13 +77,6 @@ filtreeritud = filtri_tingimused(df)
 
 pohiandmete_aeg = time.perf_counter() - algusaeg
 
-st.caption(
-    f"Põhiandmestiku filtreerimine: {pohiandmete_aeg:.3f} sekundit"
-)
-
-st.caption("RAM pärast põhiandmestiku filtreerimist")
-kuva_malukasuts()
-
 
 algusaeg = time.perf_counter()
 
@@ -102,36 +84,31 @@ prognoos_filtreeritud = filtri_tingimused(
     catboost_detailne_prognoos
 )
 
+prognoosi_sugu_vanuseruhmad = (
+    prognoos_filtreeritud
+    .loc[
+        prognoos_filtreeritud["Sugu"].isin(["Mees", "Naine"])
+    ]
+    .groupby(
+        ["Riikide grupp", "Kodakondsus", "Vanuserühm", "Sugu"],
+        observed=True
+    )[
+        ["Prognoos_kategooria_A7", "Prognoos_kategooria_A9"]
+    ]
+    .sum()
+    .reset_index()
+)
+
 catboost_aeg = time.perf_counter() - algusaeg
 
-st.caption(
-    f"CatBoosti filtreerimine: {catboost_aeg:.3f} sekundit"
+
+parquet_andmed = filtreeritud.to_parquet(
+    index=False,
+    engine="pyarrow",
+    compression="snappy"
 )
 
-st.caption("RAM pärast CatBoosti filtreerimist")
-kuva_malukasuts()
-
-st.caption(
-    f"Põhiandmestiku filtreeritud read: "
-    f"{len(filtreeritud):,}".replace(",", " ")
-)
-
-st.caption(
-    f"Põhiandmestiku filtreeritud maht: "
-    f"{filtreeritud.memory_usage(index=False, deep=True).sum() / (1024 ** 2):.2f} MB "
-    f"({filtreeritud.memory_usage(index=False, deep=True).sum() / (df.memory_usage(index=False, deep=True).sum()) * 100:.1f}%)"
-)
-
-st.caption(
-    f"CatBoosti filtreeritud read: "
-    f"{len(prognoos_filtreeritud):,}".replace(",", " ")
-)
-
-st.caption(
-    f"CatBoosti filtreeritud maht: "
-    f"{prognoos_filtreeritud.memory_usage(index=False, deep=True).sum() / (1024 ** 2):.2f} MB "
-    f"({prognoos_filtreeritud.memory_usage(index=False, deep=True).sum() / (catboost_detailne_prognoos.memory_usage(index=False, deep=True).sum()) * 100:.1f}%)"
-)
+del parquet_andmed
 # ---------------------------------
 # TULEMUSED
 # ---------------------------------
@@ -235,8 +212,6 @@ with col6:
 
 st.write("Filtreeritud andmestiku mõõtmed:", filtreeritud.shape)
 
-st.write("RAM pärast filtreerimist:")
-kuva_malukasuts()
 
 # ---------------------------------
 # AJALINE ANALÜÜS
@@ -469,9 +444,6 @@ ajalooliste_summa_kontroll = (
     .sum()
 )
 
-st.subheader("RAM pärast andmete filtreerimist")
-kuva_malukasuts()
-
 
 # ---------------------------------
 # SCHENGENI LIIKMESUSE JA LÄHTEANDMETE KLASSIFIKATSIOONI VÕRDLUS
@@ -697,8 +669,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.caption("RAM pärast fikseeritud graafikut")
-kuva_malukasuts()
 
 # ---------------------------------
 # ANALÜÜSI TULEMUSTE ALLALAADIMINE
@@ -708,59 +678,69 @@ st.divider()
 
 st.subheader("Laadi analüüsi tulemused alla")
 
-# Loome Exceli faili mälus
+# ---------------------------------
+# FILTREERITUD ALGANDMESTIK (PARQUET)
+# ---------------------------------
+
+st.markdown("**Filtreeritud algandmestik**")
+
+parquet_andmed = filtreeritud.to_parquet(
+    index=False,
+    engine="pyarrow",
+    compression="snappy"
+)
+
+st.download_button(
+    label="Lae filtreeritud algandmed alla (Parquet)",
+    data=parquet_andmed,
+    file_name="eesti_piiriuletuste_algandmed.parquet",
+    mime="application/vnd.apache.parquet",
+    width="stretch"
+)
+
+del parquet_andmed
+
+
+# ---------------------------------
+# ANALÜÜSI TULEMUSED (EXCEL)
+# ---------------------------------
+
+st.markdown("**Analüüsi koondtulemused**")
+
 def loo_excel():
     excel_buffer = io.BytesIO()
 
     with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
 
         graafiku_andmed.to_excel(
-            writer, sheet_name="Ajaline koond", index=False
+            writer, sheet_name="Ajaline analüüs", index=False
         )
 
-        aastate_andmed.to_excel(
-            writer, sheet_name="Aastate koond", index=False
+        prognoosi_graafik.to_excel(
+            writer, sheet_name="A7 ja A9 prognoosid", index=False
         )
 
-        muutuste_tabel.to_excel(
-            writer, sheet_name="Muutuste analüüs", index=False
+        gruppide_kokkuvote.to_excel(
+            writer, sheet_name="Schengeni kokkuvõte", index=False
         )
 
-        kodakondsuste_koond.to_excel(
-            writer, sheet_name="Kodakondsuste koond", index=False
+        kuukoond.to_excel(
+            writer, sheet_name="Schengeni kuuanalüüs", index=False
         )
-
-        top10_kodakondsused.to_excel(
-            writer, sheet_name="TOP 10 kodakondsust", index=False
+        prognoosi_sugu_vanuseruhmad.to_excel(
+            writer,
+            sheet_name="Sugu ja vanuserühmad",
+            index=False
         )
-
-        riikide_grupid.to_excel(
-            writer, sheet_name="Riikide grupid", index=False
-        )
-
-        hooajalisus.to_excel(
-            writer, sheet_name="Hooajalisus", index=False
-        )
-
     return excel_buffer.getvalue()
 
 
+excel_andmed = loo_excel()
+
 st.download_button(
-    label="Lae kogu analüüs alla (Excel)",
-    data=loo_excel,
+    label="Lae analüüsi tulemused alla (Excel)",
+    data=excel_andmed,
     file_name="eesti_piiriuletuste_analuus.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     width="stretch"
 )
-
-st.caption("RAM enne CSV loomist")
-kuva_malukasuts()
-
-# ---------------------------------
-# ALGANDMETE ALLALAADIMINE
-# ---------------------------------
-
-st.subheader("Algandmete allalaadimine")
-
-st.caption("RAM ilma CSV allalaadimisnuputa")
-kuva_malukasuts()

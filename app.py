@@ -139,7 +139,10 @@ valitud_vanuseruhmad = st.sidebar.multiselect(
 # ---------------------------------
 
 riikide_grupid = sorted(
-    df["Riikide grupp"].dropna().unique()
+    df.loc[
+        df["Riikide grupp"] != "Puudub",
+        "Riikide grupp"
+    ].dropna().unique()
 )
 
 valitud_riikide_grupid = st.sidebar.multiselect(

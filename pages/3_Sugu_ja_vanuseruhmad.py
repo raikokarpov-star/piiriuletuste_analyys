@@ -967,7 +967,7 @@ for algus in range(0, len(diagrammid), 3):
                                 Muutus valitud aastatel
                             </div>
                             <div style="
-                                font-size: 29px;
+                                font-size: 20px;
                                 font-weight: 600;
                                 color: {varv};
                             ">
@@ -1006,7 +1006,7 @@ for algus in range(0, len(diagrammid), 3):
                                 Keskmine aastane muutus
                             </div>
                             <div style="
-                                font-size: 29px;
+                                font-size: 20px;
                                 font-weight: 600;
                                 color: {varv_aasta};
                             ">
@@ -1098,14 +1098,14 @@ for algus in range(0, len(diagrammid), 3):
             fig.update_layout(
                 xaxis=dict(
                     tickfont=dict(
-                        size=16,
+                        size=14,
                         family="Arial",
                         color="black"
                     )
                 ),
                 yaxis=dict(
                     tickfont=dict(
-                        size=16,
+                        size=14,
                         family="Arial",
                         color="black"
                     )
@@ -1114,7 +1114,7 @@ for algus in range(0, len(diagrammid), 3):
 
             fig.update_traces(
                 textfont=dict(
-                    size=16,
+                    size=14,
                     family="Arial Black",
                     color="black"
                 )
