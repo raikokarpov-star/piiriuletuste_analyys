@@ -1,446 +1,249 @@
-import streamlit as st
-import pandas as pd
+# LEHEKESKSED FILTRID — parandatud versioon 2026-11-15
+"""PPA Eestisse sisenemiste hooajalisus: tegelikud 2021–2025 ja 2026 võrdlus."""
+
 import numpy as np
+import pandas as pd
 import plotly.express as px
-import time
 import plotly.graph_objects as go
+import streamlit as st
 
 st.title("Piiriületuste hooajalisus")
+st.caption(
+    "Tegelikud Eestisse sisenemised · 2021–2025 täisaastate hooajaline muster "
+    "ja 2026. aasta võrdlus sama perioodiga 2025. aastal"
+)
 
 df = st.session_state["andmed_df"]
-
-catboost_detailne_prognoos = st.session_state["catboost_df"]
-
-piiri_tyyp = st.session_state["piiri_tyyp"]
-valitud_punktid = st.session_state["valitud_punktid"]
-valitud_aastad = st.session_state["valitud_aastad"]
-valitud_kodakondsused = st.session_state["valitud_kodakondsused"]
-valitud_vanuseruhmad = st.session_state["valitud_vanuseruhmad"]
-valitud_riikide_grupid = st.session_state["valitud_riikide_grupid"]
-
-prognoos_filtreeritud = (
-    catboost_detailne_prognoos[
-        (catboost_detailne_prognoos["Piiripunkti tüüp"].isin(
-            ["Maismaapiir", "Õhupiir"]
-            if piiri_tyyp == "Kõik"
-            else [piiri_tyyp]
-        ))
-        & (catboost_detailne_prognoos["Piiripunkt"].isin(valitud_punktid))
-        & (catboost_detailne_prognoos["Kodakondsus"].isin(valitud_kodakondsused))
-        & (catboost_detailne_prognoos["Vanuserühm"].isin(valitud_vanuseruhmad))
-        & (catboost_detailne_prognoos["Riikide grupp"].isin(valitud_riikide_grupid))
-    ]
-    .copy()
-)
-
-# ---------------------------------
-# 2027. AASTA PROGNOOSIDE HOOAJALISUS
-# ---------------------------------
-
-prognoos_2027 = prognoos_filtreeritud[
-    prognoos_filtreeritud["Kuupäev"].dt.year == 2027
-].copy()
-
-prognoos_2027["kuu"] = prognoos_2027["Kuupäev"].dt.month
-
-prognoos_2027_kuu = (
-    prognoos_2027
-    .groupby(
-        ["kuu", "Piiripunkt"],
-        observed=True
-    )[
-        ["Prognoos_kategooria_A7", "Prognoos_kategooria_A9"]
-    ]
-    .sum()
-    .reset_index()
-)
-
-# A7 prognoosi aasta keskmine kuuprognoos
-prognoos_2027_kuu["A7 aasta keskmine"] = (
-    prognoos_2027_kuu
-    .groupby("Piiripunkt", observed=True)["Prognoos_kategooria_A7"]
-    .transform("mean")
-)
-
-# A9 prognoosi aasta keskmine kuuprognoos
-prognoos_2027_kuu["A9 aasta keskmine"] = (
-    prognoos_2027_kuu
-    .groupby("Piiripunkt", observed=True)["Prognoos_kategooria_A9"]
-    .transform("mean")
-)
-
-# A7 hooajalisuse indeks
-prognoos_2027_kuu["A7 hooajalisuse indeks"] = (
-    prognoos_2027_kuu["Prognoos_kategooria_A7"]
-    / prognoos_2027_kuu["A7 aasta keskmine"]
-    * 100
-).round(1)
-
-# A9 hooajalisuse indeks
-prognoos_2027_kuu["A9 hooajalisuse indeks"] = (
-    prognoos_2027_kuu["Prognoos_kategooria_A9"]
-    / prognoos_2027_kuu["A9 aasta keskmine"]
-    * 100
-).round(1)
-
-# A7 stabiliseeritud indeks
-prognoos_2027_kuu["A7 stabiliseeritud indeks"] = np.where(
-    prognoos_2027_kuu["Prognoos_kategooria_A7"] == 0,
-    0,
-    100 + (
-        prognoos_2027_kuu["A7 hooajalisuse indeks"] - 100
-    ) * (
-        prognoos_2027_kuu["A7 aasta keskmine"]
-        / (prognoos_2027_kuu["A7 aasta keskmine"] + 10)
-    )
-).round(1)
-
-# A9 stabiliseeritud indeks
-prognoos_2027_kuu["A9 stabiliseeritud indeks"] = np.where(
-    prognoos_2027_kuu["Prognoos_kategooria_A9"] == 0,
-    0,
-    100 + (
-        prognoos_2027_kuu["A9 hooajalisuse indeks"] - 100
-    ) * (
-        prognoos_2027_kuu["A9 aasta keskmine"]
-        / (prognoos_2027_kuu["A9 aasta keskmine"] + 10)
-    )
-).round(1)
-# ---------------------------------
-# HOOAJALISUSE ANALÜÜS
-# ---------------------------------
-
-st.divider()
-
-st.subheader("Piiriületuste hooajalisus")
-
-st.info(
-    """
-    **Mis on hooajalisuse indeks?**
-
-    Hooajalisuse indeks näitab, kui palju erineb konkreetse kuu
-    piiriületuste arv sama aasta keskmisest kuisest piiriületuste arvust.
-
-    - 100 = aasta keskmine
-    - Üle 100 = keskmisest aktiivsem kuu
-    - Alla 100 = keskmisest vaiksem kuu
-
-    Näiteks indeks 120 tähendab, et piiriületusi oli 20% rohkem
-    kui selle aasta keskmisel kuul.
-    """
-)
-
-algus_ettevalmistus = time.perf_counter()
-
-# Kasutame piiritüübi, piiripunkti ja aasta filtreid,
-# kuid mitte kuu filtrit.
-
-viimane_kpv = df["Piiriületuse kpv"].max()
-
-tingimus = (
-    (df["Piiripunkti tüüp"].isin(
-        ["Maismaapiir", "Õhupiir"]
-        if piiri_tyyp == "Kõik"
-        else [piiri_tyyp]
-    ))
-    & (df["Piiripunkt"].isin(valitud_punktid))
-    & (df["aasta"].isin(valitud_aastad))
-    & (df["Kodakondsus"].isin(valitud_kodakondsused))
-    & (df["Riikide grupp"].isin(valitud_riikide_grupid))
-    & (df["Vanuserühm"].isin(valitud_vanuseruhmad))
-)
-
-# Eemaldame osalise viimase kuu juba esialgses filtris
-if pd.notna(viimane_kpv) and viimane_kpv.day < viimane_kpv.days_in_month:
-    tingimus &= ~(
-        (df["aasta"] == viimane_kpv.year)
-        & (df["kuu"] == viimane_kpv.month)
-    )
-
-hooajalisuse_alus = df[tingimus]
-
-aeg_filter = time.perf_counter()
-
-algus_osaline_kuu = time.perf_counter()
-
-# Kontrollime viimase kuu täielikkust
-viimane_kpv = df["Piiriületuse kpv"].max()
-
-# Eemaldame poolelioleva kuu
-if pd.notna(viimane_kpv):
-    if viimane_kpv.day < viimane_kpv.days_in_month:
-        hooajalisuse_alus = hooajalisuse_alus[
-            ~(
-                (hooajalisuse_alus["aasta"] == viimane_kpv.year)
-                & (hooajalisuse_alus["kuu"] == viimane_kpv.month)
-            )
-        ]
-
-# Koondame tegelikud piiriületused
-hooajalisus = (
-    hooajalisuse_alus
-    .groupby(
-        ["aasta", "kuu", "Piiripunkt"],
-        observed=True
-    )
-    .size()
-    .reset_index(name="Piiriületuste arv")
-)
-
-# Loome iga aasta jaoks sobiva kuude kalendri
-kalendrid = []
-
-for aasta in valitud_aastad:
-
-    if pd.notna(viimane_kpv) and aasta == viimane_kpv.year:
-        viimane_taiskuu = viimane_kpv.month
-
-        if viimane_kpv.day < viimane_kpv.days_in_month:
-            viimane_taiskuu -= 1
-    else:
-        viimane_taiskuu = 12
-
-    if viimane_taiskuu > 0:
-        kalendrid.append(
-            pd.MultiIndex.from_product(
-                [
-                    [aasta],
-                    valitud_punktid,
-                    range(1, viimane_taiskuu + 1)
-                ],
-                names=["aasta", "Piiripunkt", "kuu"]
-            )
-        )
-
-if kalendrid:
-
-    indeks = kalendrid[0].append(kalendrid[1:])
-
-    # Lisame puuduvad kuud nullidega
-    hooajalisus = (
-        hooajalisus
-        .set_index(["aasta", "Piiripunkt", "kuu"])
-        .reindex(indeks, fill_value=0)
-        .reset_index()
-    )
-
-    # Arvutame aasta keskmise
-    hooajalisus["Aasta keskmine"] = (
-        hooajalisus
-        .groupby(
-            ["aasta", "Piiripunkt"],
-            observed=True
-        )["Piiriületuste arv"]
-        .transform("mean")
-    )
-
-    # Algne hooajalisuse indeks
-    hooajalisus["Hooajalisuse indeks"] = (
-        hooajalisus["Piiriületuste arv"]
-        / hooajalisus["Aasta keskmine"]
-        * 100
-    ).fillna(0).round(1)
-
-    # Stabiliseeritud indeks (k=10)
-    hooajalisus["Stabiliseeritud indeks"] = np.where(
-        hooajalisus["Piiriületuste arv"] == 0,
-        0,
-        100 + (
-            hooajalisus["Hooajalisuse indeks"] - 100
-        ) * (
-            hooajalisus["Aasta keskmine"]
-            / (hooajalisus["Aasta keskmine"] + 10)
-        )
-    ).round(1)
-
-else:
-    hooajalisus = pd.DataFrame(
-        columns=[
-            "aasta",
-            "Piiripunkt",
-            "kuu",
-            "Piiriületuste arv",
-            "Aasta keskmine",
-            "Hooajalisuse indeks",
-            "Stabiliseeritud indeks"
-        ]
-    )
-
-# Kuu nimetused
-kuu_nimed = {
-    1: "Jaanuar",
-    2: "Veebruar",
-    3: "Märts",
-    4: "Aprill",
-    5: "Mai",
-    6: "Juuni",
-    7: "Juuli",
-    8: "August",
-    9: "September",
-    10: "Oktoober",
-    11: "November",
-    12: "Detsember"
+KUUD = {
+    1: "Jaan", 2: "Veebr", 3: "Märts", 4: "Apr", 5: "Mai", 6: "Juuni",
+    7: "Juuli", 8: "Aug", 9: "Sept", 10: "Okt", 11: "Nov", 12: "Dets",
 }
+ROHELINE = "#178939"
+PUNANE = "#FF4B4B"
+HALL = "#808495"
 
-prognoos_2027_kuu["Kuu"] = prognoos_2027_kuu["kuu"].map(kuu_nimed)
+from lehe_filtrid import vali_grupp, vali_piiripunkt, grupi_mask
 
-hooajalisus["Kuu"] = hooajalisus["kuu"].map(kuu_nimed)
+c_gr, c_punkt = st.columns(2)
+with c_gr:
+    grupp = vali_grupp(df, "hoo")
+with c_punkt:
+    punkt = vali_piiripunkt(df, "hoo")
 
+mask = grupi_mask(df, grupp) & df["Piiripunkti tüüp"].isin(["Maismaapiir", "Õhupiir"])
+if punkt != "Kõik piiripunktid":
+    mask &= df["Piiripunkt"].astype(str).eq(punkt)
+mask &= df["aasta"].isin([2021, 2022, 2023, 2024, 2025, 2026])
+aastad_valitud = [2021, 2022, 2023, 2024, 2025, 2026]
 
-# Valime aastad, mida soovime võrrelda
-hooajalisuse_aastad = st.multiselect(
-    "Võrdle aastaid",
-    options=sorted(
-        aasta for aasta in hooajalisus["aasta"].unique()
-        if aasta != 2027
-    ),
-    default=sorted(
-        aasta for aasta in hooajalisus["aasta"].unique()
-        if aasta != 2027
-    )[-3:]
+# Eraldame ainult vajalikud veerud, mitte kogu 5+ miljoni reaga andmestiku koopiat.
+andmed = df.loc[mask, ["aasta", "kuu", "Piiripunkt"]]
+if andmed.empty:
+    st.warning("Valitud filtritega puuduvad tegelikud piiriületused.")
+    st.stop()
+
+# Lähteandmestiku kuu täielikkus on üldandmestiku, mitte piiratud valimi omadus.
+# Kasutame maksimaalset kuupäeva ainult 2026 võrdluse viimase kuu leidmiseks.
+max_kpv = pd.to_datetime(df["Piiriületuse kpv"].max())
+viimane_taiskuu_2026 = 0
+if pd.notna(max_kpv) and max_kpv.year >= 2026:
+    if max_kpv.year > 2026:
+        viimane_taiskuu_2026 = 12
+    else:
+        viimane_taiskuu_2026 = max_kpv.month
+        if max_kpv.day < max_kpv.days_in_month:
+            viimane_taiskuu_2026 -= 1
+
+st.caption("Hooajalisuse arvutamisel kasutatakse täisaasta kõiki 12 kuud; kuufiltrit ei rakendata.")
+
+valitavad_aastad = [a for a in range(2021, 2026) if a in aastad_valitud]
+if not valitavad_aastad:
+    st.warning("Vali vähemalt üks aasta vahemikus 2021–2025.")
+    st.stop()
+
+c_a, c_p = st.columns([1.4, 2.6])
+with c_a:
+    valitud_hooajad = st.multiselect(
+        "Võrreldavad täisaastad",
+        options=valitavad_aastad,
+        default=valitavad_aastad,
+        key="hoo_aastad_uus",
+    )
+with c_p:
+    potentsiaalsed_punktid = sorted(str(p) for p in andmed["Piiripunkt"].dropna().unique())
+    punktide_arv = st.selectbox("Soojuskaardil kuvatavaid piiripunkte", [5, 10, 15], index=0, key="hoo_top_uus")
+
+if not valitud_hooajad:
+    st.info("Vali vähemalt üks täisaasta.")
+    st.stop()
+
+# Arvutame kuu mahud tervikuna, aasta ja piiripunkti kaupa.
+kuud_koond = (
+    andmed.groupby(["aasta", "kuu"], observed=True)
+    .size().reset_index(name="Piiriületused")
+)
+punktid_koond = (
+    andmed.groupby(["aasta", "kuu", "Piiripunkt"], observed=True)
+    .size().reset_index(name="Piiriületused")
 )
 
-hooajalisuse_graafik = hooajalisus[
-    hooajalisus["aasta"].isin(hooajalisuse_aastad)
-]
+# 2021–2025: alati 12 kuud ühe aasta kohta.
+ajaloolised = kuud_koond[kuud_koond["aasta"].isin(valitud_hooajad)]
+kalender = pd.MultiIndex.from_product(
+    [valitud_hooajad, range(1, 13)], names=["aasta", "kuu"]
+)
+ajaloolised = (ajaloolised.set_index(["aasta", "kuu"])
+                .reindex(kalender, fill_value=0).reset_index())
+keskmised = ajaloolised.groupby("aasta")["Piiriületused"].transform("mean")
+ajaloolised["Indeks"] = np.where(
+    keskmised > 0,
+    ajaloolised["Piiriületused"] / keskmised.replace(0, np.nan) * 100,
+    np.nan,
+)
+ajaloolised["Kuu"] = ajaloolised["kuu"].map(KUUD)
+ajaloolised["Aasta"] = ajaloolised["aasta"].astype(str)
 
-algus_graafikud = time.perf_counter()
+# Mõõdikud: iga kuu võrdselt kaalutud keskmine indeks valitud aastate lõikes.
+kuude_indeks = ajaloolised.groupby("kuu")["Indeks"].mean().dropna()
+if kuude_indeks.empty:
+    st.warning("Valitud aastatel ei ole hooajalisuse arvutamiseks piiriületusi.")
+    st.stop()
 
-# Hooajalisuse graafikud eraldi aastate kaupa
-st.subheader("Hooajalisuse võrdlus")
+aktiivseim = int(kuude_indeks.idxmax())
+vaikseim = int(kuude_indeks.idxmin())
+indeks_max = float(kuude_indeks.max())
+indeks_min = float(kuude_indeks.min())
 
-if not hooajalisuse_aastad:
-    st.warning("Vali vähemalt üks aasta.")
+m1, m2, m3, m4 = st.columns(4)
+with m1:
+    st.metric("Kõige aktiivsem kuu", KUUD[aktiivseim])
+with m2:
+    st.metric("Kõige vaiksem kuu", KUUD[vaikseim])
+with m3:
+    st.markdown("Kõrgeim hooajalisuse indeks")
+    st.markdown(f"<div style='font-size:28px;font-weight:600;color:{ROHELINE if indeks_max > 100 else HALL}'>{indeks_max:.1f}</div>", unsafe_allow_html=True)
+with m4:
+    st.markdown("Madalaim hooajalisuse indeks")
+    st.markdown(f"<div style='font-size:28px;font-weight:600;color:{PUNANE if indeks_min < 100 else HALL}'>{indeks_min:.1f}</div>", unsafe_allow_html=True)
 
+st.caption("Indeks 100 = vastava aasta keskmine kuu. Mõõdikud põhinevad valitud täisaastate kuuindeksite keskmistel.")
+
+# 1. Täisaastate hooajalise mustri võrdlus.
+st.subheader("1. Täisaastate hooajalisuse võrdlus")
+fig1 = px.line(
+    ajaloolised,
+    x="kuu", y="Indeks", color="Aasta", markers=True,
+    custom_data=["Piiriületused"],
+    labels={"kuu": "Kuu", "Indeks": "Hooajalisuse indeks", "aasta": "Aasta"},
+    color_discrete_sequence=px.colors.qualitative.Safe,
+)
+fig1.update_traces(
+    hovertemplate="Kuu: %{x}<br>Indeks: %{y:.1f}<br>Piiriületusi: %{customdata[0]:,.0f}<extra>%{fullData.name}</extra>"
+)
+fig1.add_hline(y=100, line_dash="dash", line_color=HALL)
+fig1.update_layout(
+    height=430, template="plotly_white", hovermode="x unified",
+    xaxis=dict(tickmode="array", tickvals=list(KUUD), ticktext=list(KUUD.values()),
+               tickfont=dict(color="black")),
+    yaxis=dict(title="Hooajalisuse indeks", tickfont=dict(color="black")),
+    legend_title="Aasta", font=dict(family="Arial", color="black"),
+)
+st.plotly_chart(fig1, use_container_width=True)
+
+# 2. Piiripunktide hooajaline muster 2021–2025.
+st.subheader("2. Piiripunktide hooajalisuse soojuskaart")
+puu = punktid_koond[punktid_koond["aasta"].isin(valitud_hooajad)]
+top_punktid = (puu.groupby("Piiripunkt", observed=True)["Piiriületused"]
+               .sum().nlargest(punktide_arv).index.tolist())
+
+if top_punktid:
+    tabel_kalender = pd.MultiIndex.from_product(
+        [top_punktid, valitud_hooajad, range(1, 13)],
+        names=["Piiripunkt", "aasta", "kuu"],
+    )
+    p_koond = (puu[puu["Piiripunkt"].isin(top_punktid)]
+               .set_index(["Piiripunkt", "aasta", "kuu"])
+               .reindex(tabel_kalender, fill_value=0).reset_index())
+    p_keskmine = p_koond.groupby(["Piiripunkt", "aasta"], observed=True)["Piiriületused"].transform("mean")
+    p_koond["Indeks"] = (
+        p_koond["Piiriületused"] / p_keskmine.replace(0, np.nan) * 100
+    )
+    punktide_kuud = (p_koond.groupby(["Piiripunkt", "kuu"], observed=True)["Indeks"]
+                    .mean().reset_index())
+    heat = (punktide_kuud.pivot(index="Piiripunkt", columns="kuu", values="Indeks")
+            .reindex(index=top_punktid, columns=list(KUUD)))
+    fig2 = go.Figure(go.Heatmap(
+        z=heat.to_numpy(), x=list(KUUD.values()), y=heat.index.tolist(),
+        colorscale=[[0, "#FCE8E8"], [0.5, "#F4F5F6"], [1, "#B3E5C4"]],
+        zmid=100, zmin=50, zmax=150,
+        colorbar=dict(title="Indeks"),
+        hovertemplate="Piiripunkt: %{y}<br>Kuu: %{x}<br>Indeks: %{z:.1f}<extra></extra>",
+    ))
+    fig2.update_layout(
+        height=max(320, 54 * len(top_punktid) + 120),
+        template="plotly_white", font=dict(family="Arial", color="black"),
+        xaxis_title="Kuu", yaxis_title="", yaxis_autorange="reversed",
+        margin=dict(l=20, r=20, t=30, b=30),
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+    st.caption("Soojuskaart kuvab piiripunkti aastapõhiste indeksite keskmist. Nulliga täidetud kuud võivad tähendada ka punktis tegevuse puudumist; põhjus ei selgu avaandmetest.")
 else:
-    y_max = hooajalisuse_graafik["Stabiliseeritud indeks"].max()
-    y_max = ((y_max // 20) + 1) * 20
+    st.info("Valitud filtritega ei ole soojuskaardi jaoks piiripunkte.")
 
-    veerud = st.columns(len(hooajalisuse_aastad))
-
-    for veerg, aasta in zip(veerud, hooajalisuse_aastad):
-
-        aasta_andmed = hooajalisuse_graafik[
-            hooajalisuse_graafik["aasta"] == aasta
-        ]
-
-        fig_hooajalisus = px.line(
-            aasta_andmed,
-            x="Kuu",
-            y="Stabiliseeritud indeks",
-            color="Piiripunkt",
-            markers=True,
-            category_orders={
-                "Kuu": list(kuu_nimed.values())
-            },
-            hover_data={
-                "Piiriületuste arv": True,
-                "Hooajalisuse indeks": True,
-                "Stabiliseeritud indeks": True
-            }
-        )
-
-        fig_hooajalisus.add_hline(
-            y=100,
-            line_dash="dash",
-            annotation_text="Aasta keskmine (100)"
-        )
-
-        fig_hooajalisus.update_layout(
-            title=str(aasta),
-            xaxis_title="Kuu",
-            yaxis_title="Stabiliseeritud hooajalisuse indeks",
-            legend_title="Piiripunkt",
-            hovermode="x unified",
-            yaxis=dict(range=[0, y_max]),
-            margin=dict(l=40, r=20, t=50, b=40)
-        )
-
-        with veerg:
-            st.plotly_chart(
-                fig_hooajalisus,
-                width="stretch",
-                key=f"hooajalisuse_graafik_{aasta}"
-)
-
-graafikute_aeg = time.perf_counter() - algus_graafikud
-
-# ---------------------------------
-# 2027. AASTA PROGNOOSIGRAAFIK
-# ---------------------------------
-
-st.subheader("2027. aasta hooajalisuse prognoos")
-
-prognoosi_jooned = []
-
-for piiripunkt in sorted(prognoos_2027_kuu["Piiripunkt"].unique()):
-
-    piiripunkti_andmed = prognoos_2027_kuu[
-        prognoos_2027_kuu["Piiripunkt"] == piiripunkt
-    ].sort_values("kuu")
-
-    prognoosi_jooned.append(
-        go.Scatter(
-            x=piiripunkti_andmed["Kuu"],
-            y=piiripunkti_andmed["A7 stabiliseeritud indeks"],
-            mode="lines+markers",
-            name=f"{piiripunkt} – A7"
-        )
+# 3. 2026 võrreldes 2025 sama kuuga – üksnes tegelikud, lõpetatud kuud.
+st.subheader("3. Muutus 2026 vs 2025 samal kuul")
+if 2026 not in aastad_valitud or 2025 not in aastad_valitud:
+    st.info("2025. ja 2026. aasta võrdlemiseks on vaja mõlema aasta tegelikke andmeid.")
+elif viimane_taiskuu_2026 < 1:
+    st.info("2026. aasta lõpetatud kuude andmeid pole veel saadaval.")
+else:
+    k = list(range(1, min(12, viimane_taiskuu_2026) + 1))
+    v25 = (kuud_koond.loc[kuud_koond["aasta"] == 2025]
+           .set_index("kuu")["Piiriületused"].reindex(k, fill_value=0))
+    v26 = (kuud_koond.loc[kuud_koond["aasta"] == 2026]
+           .set_index("kuu")["Piiriületused"].reindex(k, fill_value=0))
+    yoy = pd.DataFrame({"kuu": k, "2025": v25.to_numpy(), "2026": v26.to_numpy()})
+    yoy["Muutus (%)"] = np.where(
+        yoy["2025"] > 0,
+        (yoy["2026"] - yoy["2025"]) / yoy["2025"].replace(0, np.nan) * 100,
+        np.nan,
     )
-
-    prognoosi_jooned.append(
-        go.Scatter(
-            x=piiripunkti_andmed["Kuu"],
-            y=piiripunkti_andmed["A9 stabiliseeritud indeks"],
-            mode="lines+markers",
-            name=f"{piiripunkt} – A9",
-            line=dict(dash="dash")
-        )
+    yoy["Kuu"] = yoy["kuu"].map(KUUD)
+    yoy["Värv"] = np.where(yoy["Muutus (%)"] > 0, ROHELINE,
+                            np.where(yoy["Muutus (%)"] < 0, PUNANE, HALL))
+    fig3 = go.Figure(go.Bar(
+        x=yoy["Kuu"], y=yoy["Muutus (%)"], marker_color=yoy["Värv"],
+        customdata=yoy[["2025", "2026"]].to_numpy(),
+        hovertemplate=("Kuu: %{x}<br>Muutus: %{y:+.1f}%"
+                       "<br>2025: %{customdata[0]:,.0f}"
+                       "<br>2026: %{customdata[1]:,.0f}<extra></extra>"),
+    ))
+    fig3.add_hline(y=0, line_color=HALL, line_width=1)
+    fig3.update_layout(
+        height=400, template="plotly_white", font=dict(family="Arial", color="black"),
+        xaxis_title="Kuu", yaxis_title="Muutus võrreldes 2025. aastaga (%)",
     )
+    st.plotly_chart(fig3, use_container_width=True)
+    st.caption("Võrreldud on üksnes mõlemal aastal olemasolevaid täiskuid. Kui 2025. aasta kuu maht on null, on protsentuaalne muutus määramata.")
 
-fig_prognoos_2027 = go.Figure(data=prognoosi_jooned)
-
-fig_prognoos_2027.add_hline(
-    y=100,
-    line_dash="dash",
-    annotation_text="Aasta keskmine (100)"
-)
-
-fig_prognoos_2027.update_layout(
-    title="2027. aasta prognoositud hooajalisus",
-    xaxis_title="Kuu",
-    yaxis_title="Stabiliseeritud hooajalisuse indeks",
-    hovermode="x unified",
-    xaxis=dict(
-        categoryorder="array",
-        categoryarray=list(kuu_nimed.values())
-    ),
-    margin=dict(l=40, r=20, t=50, b=40)
-)
-
-st.plotly_chart(
-    fig_prognoos_2027,
-    width="stretch",
-    key="hooajalisuse_prognoos_2027"
-)
-
-# Hooajalisuse tabel
-st.subheader("Hooajalisuse andmetabel")
-
-st.dataframe(
-    hooajalisus[
-        hooajalisus["aasta"].isin(hooajalisuse_aastad)
-    ][
-        [
-            "Piiripunkt",
-            "aasta",
-            "Kuu",
-            "Piiriületuste arv",
-            "Aasta keskmine",
-            "Hooajalisuse indeks",
-            "Stabiliseeritud indeks"
-        ]
-    ],
-    width="stretch",
-    hide_index=True
-)
+with st.expander("Detailne hooajalisuse andmetabel ja metoodika", expanded=False):
+    st.dataframe(
+        ajaloolised[["aasta", "Kuu", "Piiriületused", "Indeks"]].rename(
+            columns={"aasta": "Aasta", "Indeks": "Hooajalisuse indeks"}
+        ),
+        use_container_width=True,
+        hide_index=True,
+        column_config={"Hooajalisuse indeks": st.column_config.NumberColumn(format="%.1f")},
+    )
+    st.download_button(
+        "Laadi hooajalisuse tabel CSV-na",
+        ajaloolised[["aasta", "kuu", "Piiriületused", "Indeks"]]
+        .to_csv(index=False).encode("utf-8-sig"),
+        file_name="hooajalisuse_vordlus.csv", mime="text/csv",
+    )
+    st.markdown(
+        "**Arvutus:** hooajalisuse indeks = kuu piiriületuste arv / sama aasta "
+        "keskmine kuumaht × 100. Iga aasta keskmine arvutatakse 12 kuu põhjal. "
+        "Hooajalisuse indeks ei tõenda muutuste põhjuseid. "
+        "PPA andmed kajastavad piiriületusi, mitte unikaalseid isikuid."
+    )

@@ -1,781 +1,241 @@
 
+import io
 import streamlit as st
 import pandas as pd
-import io
-import time
 import numpy as np
-import psutil
+import plotly.express as px
 
-from utils import filtri_tingimused
-
-
-# ---------------------------------
-# LEHE SEADISTUSED
-# ---------------------------------
-
-st.title("Eesti piiriületuste dünaamiline analüüs 2021–2027")
-
-
-# ---------------------------------
-# ANDMETE LAADIMINE
-# ---------------------------------
+st.title("Eesti piiriületuste ülevaade")
+st.caption("Tegelikud Eestisse sisenemised. Põhianalüüs 2021–2025; 2026 on osaline aasta.")
 
 df = st.session_state["andmed_df"]
 
-catboost_detailne_prognoos = st.session_state["catboost_df"]
+from lehe_filtrid import vali_grupp, vali_piiripunkt, vali_aastad, grupi_mask
 
-# ---------------------------------
-# ÜHISED FILTRID APP.PY-ST
-# ---------------------------------
+c1, c2, c3 = st.columns([1.5, 2, 1.5])
+with c1:
+    grupp = vali_grupp(df, "ulev", koik=True)
+with c2:
+    punkt_valik = vali_piiripunkt(df, "ulev")
+with c3:
+    aasta_2026 = st.checkbox("Lisa 2026 tegelikud andmed", value=False, key="ulev_2026")
 
-piiri_tyyp = st.session_state["piiri_tyyp"]
-valitud_punktid = st.session_state["valitud_punktid"]
-valitud_aastad = st.session_state["valitud_aastad"]
-valitud_kuud = st.session_state["valitud_kuud"]
-valitud_kodakondsused = st.session_state["valitud_kodakondsused"]
-valitud_vanuseruhmad = st.session_state["valitud_vanuseruhmad"]
-valitud_riikide_grupid = st.session_state["valitud_riikide_grupid"]
+aastad_valitud = vali_aastad(df, "ulev", kaasa_2026=aasta_2026)
+lubatud_aastad = aastad_valitud
+if not lubatud_aastad:
+    st.info("Vali vähemalt üks aasta.")
+    st.stop()
 
+piiri_tyyp = "Kõik"
+piiripunktid = ([punkt_valik] if punkt_valik != "Kõik piiripunktid"
+                 else df["Piiripunkt"].dropna().astype(str).unique().tolist())
+kuud_valitud = list(range(1, 13))
+kodakondsused = df["Kodakondsus"].dropna().astype(str).unique().tolist()
+vanused = df["Vanuserühm"].dropna().astype(str).unique().tolist()
+riikide_grupid = ([grupp] if grupp != "Kõik riikide grupid" else
+                  [g for g in df["Riikide grupp"].dropna().astype(str).unique() if g != "Puudub"])
 
-# ---------------------------------
-# RIIKLIKUD PROGNOOSID: A7 JA A9
-# ---------------------------------
+piiriliigid = ["Maismaapiir", "Õhupiir"] if piiri_tyyp == "Kõik" else [piiri_tyyp]
 
-prognoosi_andmed = pd.DataFrame({
-    "Kuupäev": pd.date_range(
-        start="2026-11-01",
-        end="2027-12-01",
-        freq="MS"
-    ),
-    "Prognoos_A7": [
-        55214, 53773,
-        55406, 41287, 54791, 56276, 58346, 59995,
-        70231, 74723, 59020, 64134, 49862, 48975
-    ],
-    "Prognoos_A9": [
-        61387, 57223,
-        56234, 40227, 52558, 54841, 51308, 54398,
-        63494, 68550, 52933, 61903, 47214, 43050
-    ]
-})
+mask = df["Piiripunkti tüüp"].isin(piiriliigid)
+mask &= df["Piiripunkt"].isin(piiripunktid)
+mask &= df["aasta"].isin(lubatud_aastad)
+mask &= df["kuu"].isin(kuud_valitud)
+mask &= df["Kodakondsus"].isin(kodakondsused)
+mask &= df["Vanuserühm"].isin(vanused)
+mask &= df["Riikide grupp"].isin(riikide_grupid)
 
-prognoosi_andmed["aasta"] = prognoosi_andmed["Kuupäev"].dt.year
-prognoosi_andmed["kuu"] = prognoosi_andmed["Kuupäev"].dt.month
+andmed = df.loc[mask, [
+    "aasta", "kuu", "Piiripunkt", "Piiripunkti tüüp", "Kodakondsus",
+    "Riikide grupp", "Sugu", "Vanuserühm"
+]]
 
-# ---------------------------------
-# FILTRID
-# ---------------------------------
+if andmed.empty:
+    st.warning("Valitud filtritele vastavaid tegelikke piiriületusi ei leitud.")
+    st.stop()
 
+# Lisatud aasta- ja kuupõhine koond võimaldab kiireid Plotly jooniseid.
+kuukoond = (andmed.groupby(["aasta", "kuu"], observed=True)
+            .size().reset_index(name="Piiriületusi"))
+kuukoond["Kuupäev"] = pd.to_datetime(dict(
+    year=kuukoond["aasta"], month=kuukoond["kuu"], day=1
+))
 
-# ---------------------------------
-# ANDMETE FILTREERIMINE
-# ---------------------------------
+punktikuud = (andmed.groupby(["aasta", "kuu", "Piiripunkt"], observed=True)
+             .size().reset_index(name="Piiriületusi"))
+punktikuud["Kuupäev"] = pd.to_datetime(dict(
+    year=punktikuud["aasta"], month=punktikuud["kuu"], day=1
+))
 
-algusaeg = time.perf_counter()
+# Muutusi võrreldakse ainult aastatevahelise ÜHISE kuuvaliku põhjal.
+# Nii ei tekita 2026 osaline aasta kunstlikult negatiivset aastamuutust.
+aastate_nimekiri = sorted(int(a) for a in andmed["aasta"].unique())
+muutus = None
+cagr = None
+vordlus_alg = None
+vordlus_lopp = None
+vordluskuud = []
+if len(aastate_nimekiri) >= 2:
+    vordlus_alg, vordlus_lopp = aastate_nimekiri[0], aastate_nimekiri[-1]
+    alg_kuud = set(andmed.loc[andmed["aasta"] == vordlus_alg, "kuu"].astype(int))
+    lopp_kuud = set(andmed.loc[andmed["aasta"] == vordlus_lopp, "kuu"].astype(int))
+    vordluskuud = sorted(alg_kuud & lopp_kuud)
+    alg_maht = int(((andmed["aasta"] == vordlus_alg) & andmed["kuu"].isin(vordluskuud)).sum())
+    lopp_maht = int(((andmed["aasta"] == vordlus_lopp) & andmed["kuu"].isin(vordluskuud)).sum())
+    if vordluskuud and alg_maht > 0:
+        muutus = (lopp_maht / alg_maht - 1) * 100
+        if lopp_maht > 0 and vordlus_lopp > vordlus_alg:
+            cagr = ((lopp_maht / alg_maht) ** (1 / (vordlus_lopp - vordlus_alg)) - 1) * 100
 
-filtreeritud = filtri_tingimused(df)
+maht = len(andmed)
+maisi = int((andmed["Piiripunkti tüüp"] == "Maismaapiir").sum())
+maa_osakaal = maisi / maht * 100
+aktiivseid_punkte = int(andmed["Piiripunkt"].nunique())
 
-pohiandmete_aeg = time.perf_counter() - algusaeg
+def protsent(v):
+    return f"{v:+.1f}%" if v is not None and np.isfinite(v) else "—"
 
+def muutuse_color(v):
+    if v is None or not np.isfinite(v):
+        return "inherit"
+    return "#178939" if v > 0 else ("#FF4B4B" if v < 0 else "inherit")
 
-algusaeg = time.perf_counter()
-
-prognoos_filtreeritud = filtri_tingimused(
-    catboost_detailne_prognoos
-)
-
-prognoosi_sugu_vanuseruhmad = (
-    prognoos_filtreeritud
-    .loc[
-        prognoos_filtreeritud["Sugu"].isin(["Mees", "Naine"])
-    ]
-    .groupby(
-        ["Riikide grupp", "Kodakondsus", "Vanuserühm", "Sugu"],
-        observed=True
-    )[
-        ["Prognoos_kategooria_A7", "Prognoos_kategooria_A9"]
-    ]
-    .sum()
-    .reset_index()
-)
-
-catboost_aeg = time.perf_counter() - algusaeg
-
-
-parquet_andmed = filtreeritud.to_parquet(
-    index=False,
-    engine="pyarrow",
-    compression="snappy"
-)
-
-del parquet_andmed
-# ---------------------------------
-# TULEMUSED
-# ---------------------------------
-
-st.subheader("Ülevaade")
-
-col1, col2, col3, col4, col5, col6 = st.columns(6)
-
-tegelik_arv = len(filtreeritud)
-
-prognoos_a7_arv = prognoos_filtreeritud[
-    "Prognoos_kategooria_A7"
-].sum()
-
-prognoos_a9_arv = prognoos_filtreeritud[
-    "Prognoos_kategooria_A9"
-].sum()
-
-koguarv_a7 = tegelik_arv + prognoos_a7_arv
-koguarv_a9 = tegelik_arv + prognoos_a9_arv
-
-muutus_a7 = prognoos_a7_arv / tegelik_arv * 100
-muutus_a9 = prognoos_a9_arv / tegelik_arv * 100
-
-# Tegeliku piiriületuste arvu muutus
-aastate_kaupa = (
-    filtreeritud.groupby("aasta")
-    .size()
-    .sort_index()
-)
-
-if len(aastate_kaupa) >= 2:
-    esimene = aastate_kaupa.iloc[0]
-    viimane = aastate_kaupa.iloc[-1]
-    muutus = (viimane - esimene) / esimene * 100
-else:
-    muutus = None
-
-with col1:
-    st.metric(
-        "Piiriületuste arv (tegelik)",
-        f"{tegelik_arv:,.0f}".replace(",", " ")
-    )
-
-with col2:
-    varv = (
-        "#21a366" if muutus > 0
-        else "#e53935" if muutus < 0
-        else "inherit"
-    ) if muutus is not None else "inherit"
-
-    vaartus = (
-        f"{muutus:+.1f}%"
-        if muutus is not None
-        else "–"
-    )
-
+def varviline_moodik(label, value, color="inherit"):
+    # Streamlit st.metric ei võimalda põhiväärtusele tingimusvärvi anda.
     st.markdown(
-        f"""
-        <div>
-            <div style="font-size:14px; color:inherit;">
-                Tegelik muutus (%)
-            </div>
-            <div style="
-                font-size:28px;
-                font-weight:600;
-                color:{varv};
-            ">
-                {vaartus}
-            </div>
-        </div>
-        """,
+        f'<div style="font-size:14px">{label}</div>'
+        f'<div style="font-size:26px;font-weight:600;color:{color}">{value}</div>',
         unsafe_allow_html=True
     )
 
-with col3:
-    st.metric(
-        "Prognoos (A7)",
-        f"{koguarv_a7:,.0f}".replace(",", " "),
-        delta=f"+{muutus_a7:.1f}%"
+st.subheader("Põhinäitajad")
+m1, m2, m3, m4, m5 = st.columns(5)
+with m1:
+    st.metric("Piiriületusi kokku", f"{maht:,}".replace(",", " "))
+with m2:
+    varviline_moodik("Muutus võrreldavatel aastatel", protsent(muutus), muutuse_color(muutus))
+with m3:
+    varviline_moodik("Keskmine aastane kasv (CAGR)", protsent(cagr), muutuse_color(cagr))
+with m4:
+    st.metric("Aktiivseid piiripunkte", aktiivseid_punkte)
+with m5:
+    st.metric("Maismaapiiri osakaal", f"{maa_osakaal:.1f}%")
+
+if vordlus_alg is not None:
+    st.caption(
+        f"Muutuse võrdlus: {vordlus_alg} → {vordlus_lopp}; "
+        f"ühised kalendrikuud: {', '.join(map(str, vordluskuud)) or 'puuduvad'}. "
+        "Koguarv kajastab kõiki valitud perioodi tegelikke piiriületusi."
     )
-
-with col4:
-    st.metric(
-        "Prognoos (A9)",
-        f"{koguarv_a9:,.0f}".replace(",", " "),
-        delta=f"+{muutus_a9:.1f}%"
-    )
-
-with col5:
-    st.metric(
-        "Valitud piiripunkte",
-        len(valitud_punktid)
-    )
-
-with col6:
-    st.metric(
-        "Valitud aastaid",
-        len(valitud_aastad)
-    )
-
-st.write("Filtreeritud andmestiku mõõtmed:", filtreeritud.shape)
-
-
-# ---------------------------------
-# AJALINE ANALÜÜS
-# ---------------------------------
+else:
+    st.caption("Muutuse ja CAGR-i arvutamiseks peab olema valitud vähemalt kaks aastat.")
 
 st.divider()
+st.subheader("Piiriületuste ajaline dünaamika")
+fig = px.line(kuukoond, x="Kuupäev", y="Piiriületusi", markers=True,
+              title="Tegelikud piiriületused kuude lõikes")
+fig.update_traces(line_color="#178939", marker_size=5)
+fig.update_layout(height=435, xaxis_title="Aeg", yaxis_title="Piiriületusi",
+                  hovermode="x unified", font=dict(family="Arial"))
+st.plotly_chart(fig, use_container_width=True)
 
-
-st.subheader("Piiriületuste muutumine ajas vs piiripunktidega + masinõppepõhised prognoosid (november 2026 – detsember 2027)")
-
-# ---------------------------------
-# TEGELIKUD ANDMED
-# ---------------------------------
-
-graafiku_andmed = (
-    filtreeritud[
-        (filtreeritud["aasta"] < 2026)
-        | (
-            (filtreeritud["aasta"] == 2026)
-            & (filtreeritud["kuu"] <= 10)
-        )
-    ]
-    .groupby(
-        ["aasta", "kuu", "Piiripunkt"],
-        observed=True
+st.subheader("Piiripunktide dünaamika")
+punktide_suurused = (punktikuud.groupby("Piiripunkt", observed=True)["Piiriületusi"]
+                    .sum().sort_values(ascending=False))
+top_valikud = punktide_suurused.head(5).index.astype(str).tolist()
+valitud_jooned = st.multiselect(
+    "Kuvatavad piiripunktid (vaikimisi TOP 5)",
+    options=punktide_suurused.index.astype(str).tolist(), default=top_valikud,
+    key="ulevaate_jooned"
+)
+if valitud_jooned:
+    punktijooned = punktikuud.loc[punktikuud["Piiripunkt"].astype(str).isin(valitud_jooned)]
+    fig_p = px.line(punktijooned, x="Kuupäev", y="Piiriületusi", color="Piiripunkt",
+                    title="Piiripunktide tegelikud sisenemised kuude lõikes")
+    fig_p.update_layout(height=480, xaxis_title="Aeg", yaxis_title="Piiriületusi",
+                        font=dict(family="Arial"), hovermode="x unified"
     )
-    .size()
-    .reset_index(name="Piiriületuste arv")
-)
+    
+    import re
 
-graafiku_andmed["Kuupäev"] = pd.to_datetime(
-    graafiku_andmed["aasta"].astype(str)
-    + "-"
-    + graafiku_andmed["kuu"].astype(str)
-    + "-01"
-)
-
-graafiku_andmed["Stsenaarium"] = "Tegelik"
-
-# ---------------------------------
-# PROGNOOSANDMED
-# ---------------------------------
-
-prognoosi_graafik = (
-    prognoos_filtreeritud
-    .groupby(
-        ["Kuupäev", "Piiripunkt"],
-        observed=True
-    )[["Prognoos_kategooria_A7", "Prognoos_kategooria_A9"]]
-    .sum()
-    .reset_index()
-)
-
-# ---------------------------------
-# OKTOOBRI TEGELIKUD VÄÄRTUSED
-# ---------------------------------
-
-oktoobri_tegelik = graafiku_andmed[
-    graafiku_andmed["Kuupäev"] == "2026-10-01"
-][
-    ["Kuupäev", "Piiripunkt", "Piiriületuste arv"]
-].copy()
-
-
-# ---------------------------------
-# A7 PROGNOOS
-# ---------------------------------
-
-prognoos_a7 = prognoosi_graafik[
-    ["Kuupäev", "Piiripunkt", "Prognoos_kategooria_A7"]
-].rename(
-    columns={
-        "Prognoos_kategooria_A7": "Piiriületuste arv"
-    }
-)
-
-prognoos_a7 = pd.concat(
-    [oktoobri_tegelik, prognoos_a7],
-    ignore_index=True
-)
-
-prognoos_a7["Stsenaarium"] = "A7 prognoos"
-
-
-# ---------------------------------
-# A9 PROGNOOS
-# ---------------------------------
-
-prognoos_a9 = prognoosi_graafik[
-    ["Kuupäev", "Piiripunkt", "Prognoos_kategooria_A9"]
-].rename(
-    columns={
-        "Prognoos_kategooria_A9": "Piiriületuste arv"
-    }
-)
-
-prognoos_a9 = pd.concat(
-    [oktoobri_tegelik, prognoos_a9],
-    ignore_index=True
-)
-
-prognoos_a9["Stsenaarium"] = "A9 prognoos"
-
-# ---------------------------------
-# ÜHENDAME ANDMED
-# ---------------------------------
-
-graafiku_andmed = pd.concat(
-    [
-        graafiku_andmed[
-            ["Kuupäev", "Piiripunkt", "Piiriületuste arv", "Stsenaarium"]
-        ],
-        prognoos_a7,
-        prognoos_a9
-    ],
-    ignore_index=True
-)
-
-# ---------------------------------
-# TOP 5 PIIRIPUNKTI
-# ---------------------------------
-
-top5_piiripunktid = (
-    graafiku_andmed.loc[
-        graafiku_andmed["Stsenaarium"] == "Tegelik"
-    ]
-    .groupby("Piiripunkt")["Piiriületuste arv"]
-    .sum()
-    .nlargest(5)
-    .index
-    .tolist()
-)
-
-# ---------------------------------
-# JOONDIAGRAMM
-# ---------------------------------
-
-import plotly.express as px
-
-
-fig = px.line(
-    graafiku_andmed,
-    x="Kuupäev",
-    y="Piiriületuste arv",
-    color="Piiripunkt",
-    line_dash="Stsenaarium",
-    markers=False,
-    title="Piiriületused kuude lõikes",
-    line_dash_map={
-        "Tegelik": "solid",
-        "A7 prognoos": "dash",
-        "A9 prognoos": "dot"
-    }
-)
-
-# ---------------------------------
-# PIIRIPUNKTIDE ALGSED VÄRVID
-# ---------------------------------
-
-piiripunkti_varvid = {}
-
-for trace in fig.data:
-    if trace.name.endswith(", Tegelik"):
-        piiripunkt = trace.name.rsplit(", ", 1)[0]
-        piiripunkti_varvid[piiripunkt] = trace.line.color
-
-# ---------------------------------
-# JOONTE VÄRVID, STIILID JA PAKSUS
-# ---------------------------------
-
-for trace in fig.data:
-    piiripunkt = trace.name.rsplit(", ", 1)[0]
-    varv = piiripunkti_varvid.get(piiripunkt)
-
-    if varv:
-        trace.line.color = varv
-
-    # Kõik sama piiripunkti jooned kuuluvad ühte gruppi
-    trace.legendgroup = piiripunkt
-
-    # Legendis näitame ainult TOP 5 tegelikke piiripunkte
-    trace.showlegend = (
-        piiripunkt in top5_piiripunktid
-        and trace.name.endswith(", Tegelik")
-    )
-
-    if trace.name.endswith(", Tegelik"):
-        trace.line.width = 2
-
-    elif trace.name.endswith(", A7 prognoos"):
-        trace.line.width = 2.5
-
-    elif trace.name.endswith(", A9 prognoos"):
-        trace.line.width = 2.5
-
-import re
-
-for trace in fig.data:
-    trace.name = re.sub(
-        r"\s+piiripunkt\b",
+# Eemaldame kõigi legendi nimetuste lõpust sõna "piiripunkt"
+    for trace in fig_p.data:
+        trace.name = re.sub(
+            r"\s+piiripunkt\s*$",
         "",
         trace.name,
         flags=re.IGNORECASE
-    )
+    ).strip()
 
-fig.update_layout(
-    xaxis_title="Aeg",
-    yaxis_title="Piiriületuste arv",
-    hovermode="closest",
-    legend=dict(
-        orientation="h",
-        yanchor="top",
-        y=-0.3,
-        xanchor="center",
-        x=0.5,
-        title=None
-    ),
-
-    margin=dict(
-        b=150
-    )
-)
-
-st.plotly_chart(
-    fig,
-    width="stretch",
-    key="piiriuletuste_ajagraafik"
-)
-
-# ---------------------------------
-# CATBOOSTI JA AJALOOLISTE ANDMETE LAADIMINE
-# ---------------------------------
-
-@st.cache_data
-def lae_piiripunktide_osakaalud():
-
-    ajaloolised = pd.read_csv(
-        "ajaloolised_piiripunktide_osakaalud.csv",
-        parse_dates=["Kuupäev"]
-    )
-
-    prognoosid = pd.read_csv(
-        "catboost_piiripunktide_prognoos.csv",
-        parse_dates=["Kuupäev"]
-    )
-
-    detailne_prognoos = pd.read_csv(
-        "catboost_detailne_prognoos.csv",
-        parse_dates=["Kuupäev"]
-    )
-
-    return ajaloolised, prognoosid, detailne_prognoos
-
-
-(
-    ajaloolised_osakaalud,
-    catboost_osakaalud,
-    catboost_detailne_prognoos
-) = lae_piiripunktide_osakaalud()
-
-
-ajalooliste_summa_kontroll = (
-    ajaloolised_osakaalud
-    .groupby("Kuupäev")["Osakaal_%"]
-    .sum()
-)
-
-
-# ---------------------------------
-# SCHENGENI LIIKMESUSE JA LÄHTEANDMETE KLASSIFIKATSIOONI VÕRDLUS
-# ---------------------------------
-
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
-st.subheader(
-    "Schengeni liikmelisuse ja lähteandmestiku riikide grupi klassifikatsiooni võrdlus"
-)
-
-st.markdown(
-    """
-    Naiste osakaalu analüüsimisel tekkis täiendav küsimus, 
-    kas lähteandmestikus kasutatav riikide gruppide klassifikatsioon vastab 
-    riikide tegelikule ajaloolisele Schengeni liikmelisusele.
-
-    Selle kontrollimiseks vaatleme kolme riiki, mille puhul 
-    ilmnesid erinevused: Bulgaaria, Rumeenia ja Horvaatia.
-    """
-)
-
-# ---------------------------------
-# LÄHTEANDMED
-# ---------------------------------
-
-schengeni_riigid = {
-    "Bulgaaria Vabariik": {
-        "nimi": "Bulgaaria",
-        "liikmesus": "2025-01-01"
-    },
-    "Rumeenia": {
-        "nimi": "Rumeenia",
-        "liikmesus": "2025-01-01"
-    },
-    "Horvaatia Vabariik": {
-        "nimi": "Horvaatia",
-        "liikmesus": "2023-01-01"
-    }
-}
-
-gruppide_varvid = {
-    "EL/EMP/CH": "#E69F00",
-    "Schengen, EL/EMP/CH": "#178939"
-}
-
-schengeni_kontroll = df[
-    df["Kodakondsus"].isin(schengeni_riigid)
-].copy()
-
-schengeni_kontroll["Kuupäev"] = (
-    pd.to_datetime(schengeni_kontroll["Piiriületuse kpv"])
-    .dt.to_period("M")
-    .dt.to_timestamp()
-)
-
-kuukoond = (
-    schengeni_kontroll
-    .groupby(
-        ["Kodakondsus", "Kuupäev", "Riikide grupp"],
-        observed=True
-    )
-    .size()
-    .reset_index(name="Piiriületuste arv")
-)
-
-# ---------------------------------
-# KOKKUVÕTE
-# ---------------------------------
-
-gruppide_kokkuvote = (
-    schengeni_kontroll
-    .groupby(
-        ["Kodakondsus", "Riikide grupp"],
-        observed=True
-    )
-    .agg(
-        Piiriületuste_arv=("Piiriületuse kpv", "size"),
-        Esimene_kuupäev=("Piiriületuse kpv", "min"),
-        Viimane_kuupäev=("Piiriületuse kpv", "max")
-    )
-    .reset_index()
-)
-
-# ---------------------------------
-# GRAAFIK
-# ---------------------------------
-
-riigid = list(schengeni_riigid.keys())
-
-fig_schengeni_kontroll = make_subplots(
-    rows=3,
-    cols=1,
-    subplot_titles=[
-        "<b style='color:black'>Bulgaaria</b>",
-        "<b style='color:black'>Rumeenia</b>",
-        "<b style='color:black'>Horvaatia</b>"
-    ],
-    shared_xaxes=True,
-    vertical_spacing=0.10
-)
-
-for rea, riik in enumerate(riigid, start=1):
-
-    for grupp, varv in gruppide_varvid.items():
-
-        grupi_andmed = (
-            kuukoond[
-                (kuukoond["Kodakondsus"] == riik)
-                & (kuukoond["Riikide grupp"] == grupp)
-            ]
-            .sort_values("Kuupäev")
-        )
-
-        fig_schengeni_kontroll.add_trace(
-            go.Bar(
-                x=grupi_andmed["Kuupäev"],
-                y=grupi_andmed["Piiriületuste arv"],
-                name=grupp,
-                legendgroup=grupp,
-                showlegend=(rea == 1),
-                marker_color=varv,
-                hovertemplate=(
-                    "<b>%{x|%B %Y}</b><br>"
-                    + grupp
-                    + "<br>Piiriületusi: %{y:,}"
-                    + "<extra></extra>"
-                )
-            ),
-            row=rea,
-            col=1
-        )
-
-    # Ametliku Schengeni liikmelisuse algus
-    liikmesuse_kuupaev = pd.Timestamp(
-        schengeni_riigid[riik]["liikmesus"]
-    )
-
-    fig_schengeni_kontroll.add_vline(
-        x=liikmesuse_kuupaev,
-        line_dash="dash",
-        line_color="#D62728",
-        line_width=2,
-        row=rea,
-        col=1
-    )
-
-    # Liikmesuse kuupäeva selgitus
-    fig_schengeni_kontroll.add_annotation(
-        x=liikmesuse_kuupaev,
-        y=1,
-        xref="x domain" if rea == 1 else f"x{rea} domain",
-        yref="y domain" if rea == 1 else f"y{rea} domain",
-        text=(
-            "Ametlik Schengeni liikmesuse algus<br>"
-            + liikmesuse_kuupaev.strftime("%d.%m.%Y")
-        ),
-        showarrow=False,
-        xanchor="left",
-        yanchor="top",
-        xshift=5,
-        font=dict(size=10, color="#D62728"),
-        bgcolor="rgba(255,255,255,0.9)"
-    )
-
-
-# ---------------------------------
-# KUJUNDUS
-# ---------------------------------
-
-fig_schengeni_kontroll.update_layout(
-    height=1050,
-    barmode="group",
-    template="plotly_white",
-    hovermode="x unified",
-    legend=dict(
-    title="Lähteandmestiku riikide grupp",
-    orientation="v",
-    yanchor="middle",
-    y=0.5,
-    xanchor="left",
-    x=1.02
-),
-    margin=dict(
-    l=70,
-    r=260,
-    t=100,
-    b=60
-)
-)
-
-fig_schengeni_kontroll.update_yaxes(
-    title_text="Piiriületuste arv",
-    rangemode="tozero",
-    showgrid=True,
-    gridcolor="#E5E5E5"
-)
-
-fig_schengeni_kontroll.update_xaxes(
-    title_text="Aeg",
-    tickformat="%Y",
-    showgrid=False
-)
-
-st.plotly_chart(
-    fig_schengeni_kontroll,
-    width="stretch"
-)
-
-st.markdown(
-    """
-    <p style="font-size: 15px; color: black;">
-    <em>
-    Punane katkendjoon tähistab riigi ametliku Schengeni liikmesuse alguskuupäeva.
-    Tulbad kajastavad lähteandmestikus kasutatud riikide gruppide klassifikatsiooni
-    ajalist jaotust. Ametliku liikmesuse kuupäeva ja lähteandmestikus kajastatud
-    klassifikatsiooni vahel ilmnevad erinevused osutavad ajalise klassifitseerimise
-    lahknevustele, kuid ei võimalda iseenesest järeldada lähteandmete ebaõigsust.
-    </em>
-    </p>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# ---------------------------------
-# ANALÜÜSI TULEMUSTE ALLALAADIMINE
-# ---------------------------------
+    trace.legendgroup = trace.name
+    fig_p.update_layout(legend_title_text="")
+    st.plotly_chart(fig_p, use_container_width=True)
+else:
+    st.info("Vali vähemalt üks piiripunkt.")
 
 st.divider()
+st.subheader("Andmete allalaadimine")
+st.caption("Eksporditakse ainult selle lehe filtritele vastavaid tegelikke sisenemisi. "
+           "A7/A9 prognooside kokkuvõte asub lühianalüüsi juures.")
 
-st.subheader("Laadi analüüsi tulemused alla")
+# Filtrite muutmisel tühjendame eelmise valiku ekspordid,
+# et allalaadimise nupp ei pakuks kogemata vanu andmeid.
+filtri_tunnus = repr((
+    piiri_tyyp, tuple(piiripunktid), tuple(lubatud_aastad),
+    tuple(kuud_valitud), tuple(kodakondsused),
+    tuple(vanused), tuple(riikide_grupid)
+))
+if st.session_state.get("ulevaade_ekspordi_filtri_tunnus") != filtri_tunnus:
+    st.session_state.pop("ulevaade_parquet_baidid", None)
+    st.session_state.pop("ulevaade_excel_baidid", None)
+    st.session_state["ulevaade_ekspordi_filtri_tunnus"] = filtri_tunnus
 
-# ---------------------------------
-# FILTREERITUD ALGANDMESTIK (PARQUET)
-# ---------------------------------
+# Parquet-fail genereeritakse vaid nupu vajutamisel, mitte lehe igal uuendamisel.
+if st.button("Valmista filtreeritud Parquet-fail", key="ulevaade_parquet_loo"):
+    # Kasutame originaalandmestiku kõiki veerge vastavalt valitud maskile.
+    st.session_state["ulevaade_parquet_baidid"] = df.loc[mask].to_parquet(
+        index=False, engine="pyarrow", compression="snappy"
+    )
+if "ulevaade_parquet_baidid" in st.session_state:
+    st.download_button(
+        "Laadi filtreeritud algandmed alla (Parquet)",
+        data=st.session_state["ulevaade_parquet_baidid"],
+        file_name="eesti_piiriuletuste_algandmed.parquet",
+        mime="application/vnd.apache.parquet"
+    )
 
-st.markdown("**Filtreeritud algandmestik**")
+# Exceli puhul ekspordime koondtabelid, mitte miljoneid algkirjeid.
+if st.button("Valmista Exceli koondtabelid", key="ulevaade_excel_loo"):
+    excel = io.BytesIO()
+    kokku_punktid = (andmed.groupby("Piiripunkt", observed=True)
+                     .size().reset_index(name="Piiriületusi")
+                     .sort_values("Piiriületusi", ascending=False))
+    grupid = (andmed.groupby("Riikide grupp", observed=True)
+              .size().reset_index(name="Piiriületusi"))
+    kodakondsuste_koond = (andmed.groupby("Kodakondsus", observed=True)
+                          .size().reset_index(name="Piiriületusi")
+                          .sort_values("Piiriületusi", ascending=False))
+    with pd.ExcelWriter(excel, engine="openpyxl") as writer:
+        kuukoond.to_excel(writer, sheet_name="Kuude koond", index=False)
+        punktikuud.to_excel(writer, sheet_name="Piiripunktid kuude kaupa", index=False)
+        kokku_punktid.to_excel(writer, sheet_name="Piiripunktide koond", index=False)
+        grupid.to_excel(writer, sheet_name="Riikide grupid", index=False)
+        kodakondsuste_koond.to_excel(writer, sheet_name="Kodakondsused", index=False)
+    st.session_state["ulevaade_excel_baidid"] = excel.getvalue()
+if "ulevaade_excel_baidid" in st.session_state:
+    st.download_button(
+        "Laadi analüüsi koondtulemused alla (Excel)",
+        data=st.session_state["ulevaade_excel_baidid"],
+        file_name="eesti_piiriuletuste_analuus.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
-parquet_andmed = filtreeritud.to_parquet(
-    index=False,
-    engine="pyarrow",
-    compression="snappy"
-)
+with st.expander("Tehnilised andmekontrollid", expanded=False):
+    st.write("Filtreeritud kirjete arv:", len(andmed))
+    st.write("Valitud aastad:", sorted(andmed["aasta"].unique().tolist()))
+    st.write("Filtreeritud andmete kuude arv:", kuukoond.shape[0])
+    st.write("Aktiivsete piiripunktide arv:", aktiivseid_punkte)
+    st.write("Kasutatud aastatevahelised võrdluskuud:", vordluskuud)
 
-st.download_button(
-    label="Lae filtreeritud algandmed alla (Parquet)",
-    data=parquet_andmed,
-    file_name="eesti_piiriuletuste_algandmed.parquet",
-    mime="application/vnd.apache.parquet",
-    width="stretch"
-)
-
-del parquet_andmed
-
-
-# ---------------------------------
-# ANALÜÜSI TULEMUSED (EXCEL)
-# ---------------------------------
-
-st.markdown("**Analüüsi koondtulemused**")
-
-def loo_excel():
-    excel_buffer = io.BytesIO()
-
-    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-
-        graafiku_andmed.to_excel(
-            writer, sheet_name="Ajaline analüüs", index=False
-        )
-
-        prognoosi_graafik.to_excel(
-            writer, sheet_name="A7 ja A9 prognoosid", index=False
-        )
-
-        gruppide_kokkuvote.to_excel(
-            writer, sheet_name="Schengeni kokkuvõte", index=False
-        )
-
-        kuukoond.to_excel(
-            writer, sheet_name="Schengeni kuuanalüüs", index=False
-        )
-        prognoosi_sugu_vanuseruhmad.to_excel(
-            writer,
-            sheet_name="Sugu ja vanuserühmad",
-            index=False
-        )
-    return excel_buffer.getvalue()
-
-
-excel_andmed = loo_excel()
-
-st.download_button(
-    label="Lae analüüsi tulemused alla (Excel)",
-    data=excel_andmed,
-    file_name="eesti_piiriuletuste_analuus.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    width="stretch"
-)
+st.caption("Piiriületuste arv ei võrdu unikaalsete isikute arvuga. "
+           "Kirjeldavad muutused ei tõenda geopoliitiliste sündmuste põhjuslikku mõju.")
