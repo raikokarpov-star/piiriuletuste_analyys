@@ -92,66 +92,222 @@ with c2:
 st.caption("A7 ja A9 võrdlus on suunav: A9 kasutab treeningakende katset ning täielikku mudelite A1–A9 edetabelit ei saa ilma teiste mudelite tagasitestimise tulemusteta koostada.")
 
 st.divider()
+
+st.divider()
 st.subheader("2. Tegelikud sisenemised ja A7/A9 prognoos")
 
-# Filtrid teadlikult lokaalsed: ei kasutata endisi külgriba session_state väärtusi.
-grupid = sorted(prog["Riikide grupp"].dropna().astype(str).unique().tolist())
-
-# Kasutame ainult maismaa- ja õhupiiri
+# Kasutame ainult maismaa- ja õhupiiri.
 lubatud_tyybid = ["Maismaapiir", "Õhupiir"]
 
-prog = prog.loc[
-    prog["Piiripunkti tüüp"].isin(lubatud_tyybid)
+prog2 = prog.loc[
+    prog["Piiripunkti tüüp"].astype(str).isin(lubatud_tyybid)
 ].copy()
 
-tyybid = lubatud_tyybid
+# Kohalikud filtrid
+grupid = sorted(
+    prog2["Riikide grupp"].dropna().astype(str).unique().tolist()
+)
 
-vaikegrupp = "3.riik" if "3.riik" in grupid else (grupid[0] if grupid else "")
+tyybid = [
+    t for t in lubatud_tyybid
+    if t in prog2["Piiripunkti tüüp"].astype(str).unique()
+]
+
+vaikegrupp = "3.riik" if "3.riik" in grupid else "Kõik"
+
 f1, f2, f3 = st.columns([1.4, 1.4, 1.8])
-with f1:
-    ulatus = st.selectbox("Riikide grupp", ["Kõik"] + grupid, index=(["Kõik"] + grupid).index(vaikegrupp) if vaikegrupp else 0)
-with f2:
-    tyyp = st.selectbox("Piiripunkti tüüp", ["Kõik"] + tyybid)
-with f3:
-    punktid = sorted(prog["Piiripunkt"].dropna().astype(str).unique().tolist())
-    punkt = st.selectbox("Piiripunkt", ["Kõik"] + punktid)
 
-q = prog
+with f1:
+    ulatus = st.selectbox(
+        "Riikide grupp",
+        ["Kõik"] + grupid,
+        index=(["Kõik"] + grupid).index(vaikegrupp),
+        key="prognoos_riikide_grupp"
+    )
+
+with f2:
+    tyyp = st.selectbox(
+        "Piiripunkti tüüp",
+        ["Kõik"] + tyybid,
+        key="prognoos_piiri_tyyp"
+    )
+
+# Piiripunktid vastavalt valitud piiritüübile
+punktivalik = prog2
+
+if tyyp != "Kõik":
+    punktivalik = punktivalik.loc[
+        punktivalik["Piiripunkti tüüp"].astype(str) == tyyp
+    ]
+
+punktid = sorted(
+    punktivalik["Piiripunkt"].dropna().astype(str).unique().tolist()
+)
+
+with f3:
+    punkt = st.selectbox(
+        "Piiripunkt",
+        ["Kõik"] + punktid,
+        key="prognoos_piiripunkt"
+    )
+
+# ------------------------------------------
+# 1. Prognooside filtreerimine
+# ------------------------------------------
+
+q = prog2
+
 if ulatus != "Kõik":
     q = q.loc[q["Riikide grupp"].astype(str) == ulatus]
+
 if tyyp != "Kõik":
     q = q.loc[q["Piiripunkti tüüp"].astype(str) == tyyp]
+
 if punkt != "Kõik":
     q = q.loc[q["Piiripunkt"].astype(str) == punkt]
 
-kuine = (q.groupby("Kuupäev", observed=True)[["Prognoos_kategooria_A7", "Prognoos_kategooria_A9"]]
-         .sum().reset_index().sort_values("Kuupäev"))
+kuine = (
+    q.groupby("Kuupäev", observed=True)[
+        ["Prognoos_kategooria_A7", "Prognoos_kategooria_A9"]
+    ]
+    .sum()
+    .reset_index()
+    .sort_values("Kuupäev")
+)
+
+kuine["Kuupäev"] = pd.to_datetime(kuine["Kuupäev"])
+
+# ------------------------------------------
+# 2. Tegelike PPA andmete filtreerimine
+# ------------------------------------------
+
+df_hist = st.session_state["andmed_df"]
+
+
+# Piirame tegelikud andmed uurimistöö perioodiga.
+# Muudame vaid filtreeritud vaadet, mitte jagatud algandmestikku.
+kuupaevad = pd.to_datetime(
+    df_hist["Piiriületuse kpv"],
+    errors="coerce"
+)
+
+df_hist = df_hist.loc[
+    kuupaevad.between("2021-01-01", "2026-10-31")
+    & df_hist["Piiripunkti tüüp"].astype(str).isin(lubatud_tyybid)
+]
+
+if ulatus != "Kõik":
+    df_hist = df_hist.loc[
+        df_hist["Riikide grupp"].astype(str) == ulatus
+    ]
+
+if tyyp != "Kõik":
+    df_hist = df_hist.loc[
+        df_hist["Piiripunkti tüüp"].astype(str) == tyyp
+    ]
+
+if punkt != "Kõik":
+    df_hist = df_hist.loc[
+        df_hist["Piiripunkt"].astype(str) == punkt
+    ]
+
+
+# Üks rida tähendab üht registreeritud piiriületust.
+# Kasutame juba filtreeritud andmestiku tegelikke kuupäevi.
+tegelikud = (
+    df_hist.assign(
+        Kuu=pd.to_datetime(
+            df_hist["Piiriületuse kpv"],
+            errors="coerce"
+        ).dt.to_period("M").dt.to_timestamp()
+    )
+    .groupby("Kuu", observed=True)
+    .size()
+    .rename("Tegelik")
+    .reset_index()
+    .sort_values("Kuu")
+)
+
+# Täidame vaadeldava ajavahemiku puuduvad kuud nulliga.
+kuud = pd.DataFrame({
+    "Kuu": pd.date_range(
+        "2021-01-01",
+        "2026-10-01",
+        freq="MS"
+    )
+})
+
+tegelikud = kuud.merge(tegelikud, on="Kuu", how="left")
+tegelikud["Tegelik"] = tegelikud["Tegelik"].fillna(0)
+
+# ------------------------------------------
+# 3. Ühine graafik
+# ------------------------------------------
 
 fig_p = go.Figure()
-# Tagasitestimise ajalooline seeria on RIIGILIK kogusumma, mitte kohalike filtrite alamhulk.
-# Kohalike filtrite puhul seda ei kuvata, et vältida vale võrdlust.
-riiklik_ulatus = ulatus == "Kõik" and tyyp == "Kõik" and punkt == "Kõik"
-if riiklik_ulatus:
-    fig_p.add_trace(go.Scatter(x=a7_detail["Kuupäev"], y=a7_detail["Tegelik"],
-                               name="Tegelik · tagasitestimise sihtseeria", mode="lines",
-                               line=dict(color="black", width=2)))
+
+fig_p.add_trace(
+    go.Scatter(
+        x=tegelikud["Kuu"],
+        y=tegelikud["Tegelik"],
+        name="Tegelikud sisenemised",
+        mode="lines",
+        line=dict(color="black", width=2.5)
+    )
+)
+
 for veerg, nimi, varv, stiil in [
     ("Prognoos_kategooria_A7", "A7 · prognoos", ROHELINE, "dash"),
     ("Prognoos_kategooria_A9", "A9 · prognoos", ORANZ, "dot"),
 ]:
-    fig_p.add_trace(go.Scatter(x=kuine["Kuupäev"], y=kuine[veerg], name=nimi,
-                               mode="lines+markers", line=dict(color=varv, width=2.5, dash=stiil)))
-fig_p.update_layout(height=475, font=dict(family="Arial", color="black"),
-                    xaxis_title="Aeg", yaxis_title="Piiriületusi kuus",
-                    hovermode="x unified", legend=dict(orientation="h", y=-0.23),
-                    margin=dict(t=35, b=100))
-st.plotly_chart(fig_p, use_container_width=True)
-if not riiklik_ulatus:
-    st.info("Filtreeritud prognoos on valitud grupi/piiripunkti kohta. Ajaloolist riiklikku tagasitestimise seeriat ei kuvata, sest see ei oleks sama ulatusega. Ajaloolise filtrivõrdluse jaoks oleks vaja vastavat PPA algandmete kuukoondit.")
-else:
-    st.caption("Must joon on A7 tagasitestimise tegelik riiklik sihtseeria (2023–2026 oktoober). Prognoosid algavad novembris 2026. Need on erinevad perioodid ning prognoose ei käsitleta tegelike tulemustena.")
+    fig_p.add_trace(
+        go.Scatter(
+            x=kuine["Kuupäev"],
+            y=kuine[veerg],
+            name=nimi,
+            mode="lines+markers",
+            line=dict(
+                color=varv,
+                width=2.5,
+                dash=stiil
+            )
+        )
+    )
+
+# Tegelike andmete ja prognoosi piir
+fig_p.add_vline(
+    x=pd.Timestamp("2026-11-01").timestamp() * 1000,
+    line_width=1.5,
+    line_dash="dash",
+    line_color="gray"
+)
+
+fig_p.update_layout(
+    height=475,
+    font=dict(family="Arial", color="black"),
+    xaxis_title="Aeg",
+    yaxis_title="Piiriületusi kuus",
+    hovermode="x unified",
+    legend=dict(orientation="h", y=-0.23),
+    margin=dict(t=35, b=100)
+)
+
+st.plotly_chart(
+    fig_p,
+    width="stretch",
+    key="prognoos_tegelikud_ja_a7_a9"
+)
+
+st.caption(
+    "Must joon: PPA tegelikud Eestisse sisenemised "
+    "jaanuar 2021 – oktoober 2026. "
+    "Roheline ja oranž joon: A7 ja A9 prognoosid "
+    "november 2026 – detsember 2027. "
+    "Kõik jooned lähtuvad samadest valitud filtritest."
+)
 
 st.divider()
+
 st.subheader("3. Piiripunktide prognoositud töökoormus")
 prog_2027 = prog.loc[(prog["Kuupäev"].dt.year == 2027) & (prog["Piiripunkti tüüp"].isin(["Maismaapiir", "Õhupiir"]))].copy()
 if ulatus != "Kõik":
