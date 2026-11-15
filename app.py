@@ -1,17 +1,35 @@
+
 import streamlit as st
 from utils import lae_andmed, lae_catboost_detailne_prognoos
 
-st.set_page_config(page_title="Eesti piiriületuste analüüs", page_icon="🇪🇪", layout="wide")
+st.set_page_config(
+    page_title="Eesti piiriületuste analüüs",
+    page_icon="🇪🇪",
+    layout="wide"
+)
+
+@st.cache_data(max_entries=1, show_spinner="Laen PPA andmeid...")
+def laaditud_andmed():
+    return lae_andmed()
+
+@st.cache_data(max_entries=1, show_spinner="Laen prognoosiandmeid...")
+def laaditud_prognoos():
+    return lae_catboost_detailne_prognoos()
 
 if "andmed_df" not in st.session_state:
-    st.session_state["andmed_df"] = lae_andmed()
+    st.session_state["andmed_df"] = laaditud_andmed()
 
 if "catboost_df" not in st.session_state:
-    st.session_state["catboost_df"] = lae_catboost_detailne_prognoos()
+    st.session_state["catboost_df"] = laaditud_prognoos()
 
-# Uued lehed ei kasuta app.py ühiseid filtreid.
+# Igal lehel on oma kohalikud filtrid.
 leht = st.navigation([
-    st.Page("pages/6_Lühianalüüsi_metoodiline_kirjeldus.py", title="Lühianalüüs", icon="📚", default=True),
+    st.Page(
+        "pages/6_Lühianalüüsi_metoodiline_kirjeldus.py",
+        title="Lühianalüüs",
+        icon="📚",
+        default=True
+    ),
     st.Page("pages/1_Ülevaade.py", title="Ülevaade", icon="📊"),
     st.Page("pages/7_Kodakondsuste_vordlus.py", title="Kodakondsuste võrdlus", icon="🌍"),
     st.Page("pages/3_Sugu_ja_vanuseruhmad.py", title="Sugu ja vanuserühmad", icon="👥"),
@@ -19,4 +37,5 @@ leht = st.navigation([
     st.Page("pages/5_Hooajalisus.py", title="Hooajalisus", icon="📅"),
     st.Page("pages/2_Prognoos_ja_mudelite_vordlus.py", title="Prognoos ja mudelid", icon="📈"),
 ])
+
 leht.run()
