@@ -8,28 +8,22 @@ st.set_page_config(
     layout="wide"
 )
 
-@st.cache_data(max_entries=1, show_spinner="Laen PPA andmeid...")
+# Üks jagatud andmestik kõigi kasutajate jaoks
+@st.cache_resource(show_spinner="Laen PPA andmeid...")
 def laaditud_andmed():
     return lae_andmed()
 
-@st.cache_data(max_entries=1, show_spinner="Laen prognoosiandmeid...")
+@st.cache_resource(show_spinner="Laen prognoosiandmeid...")
 def laaditud_prognoos():
     return lae_catboost_detailne_prognoos()
 
-if "andmed_df" not in st.session_state:
-    st.session_state["andmed_df"] = laaditud_andmed()
-
-if "catboost_df" not in st.session_state:
-    st.session_state["catboost_df"] = laaditud_prognoos()
+# Session state sisaldab viiteid jagatud andmestikele.
+st.session_state["andmed_df"] = laaditud_andmed()
+st.session_state["catboost_df"] = laaditud_prognoos()
 
 # Igal lehel on oma kohalikud filtrid.
 leht = st.navigation([
-    st.Page(
-        "pages/6_Lühianalüüsi_metoodiline_kirjeldus.py",
-        title="Lühianalüüs",
-        icon="📚",
-        default=True
-    ),
+    st.Page("pages/6_Lühianalüüsi_metoodiline_kirjeldus.py", title="Lühianalüüs", icon="📚", default=True),
     st.Page("pages/1_Ülevaade.py", title="Ülevaade", icon="📊"),
     st.Page("pages/7_Kodakondsuste_vordlus.py", title="Kodakondsuste võrdlus", icon="🌍"),
     st.Page("pages/3_Sugu_ja_vanuseruhmad.py", title="Sugu ja vanuserühmad", icon="👥"),
