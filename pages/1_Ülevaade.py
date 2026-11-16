@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import qrcode
 
 st.title("Eesti piiriületuste ülevaade")
 st.caption("Tegelikud Eestisse sisenemised. Põhianalüüs 2021–2025; 2026 on osaline aasta.")
@@ -239,3 +240,39 @@ with st.expander("Tehnilised andmekontrollid", expanded=False):
 
 st.caption("Piiriületuste arv ei võrdu unikaalsete isikute arvuga. "
            "Kirjeldavad muutused ei tõenda geopoliitiliste sündmuste põhjuslikku mõju.")
+
+
+# ---------------------------------
+# GITHUBI QR-KOOD
+# ---------------------------------
+
+st.divider()
+st.subheader("Projekti lähtekood")
+
+github_url = "https://github.com/raikokarpov-star/piiriuletuste_analyys"
+
+st.write(
+    "Projekti lähtekoodi ja failidega tutvumiseks "
+    "skanni QR-kood või ava GitHubi link."
+)
+
+qr = qrcode.QRCode(
+    version=1,
+    box_size=10,
+    border=4
+)
+
+qr.add_data(github_url)
+qr.make(fit=True)
+
+qr_pilt = qr.make_image(
+    fill_color="black",
+    back_color="white"
+).convert("RGB")
+
+st.image(qr_pilt, width=180)
+
+st.link_button(
+    "Ava projekt GitHubis",
+    github_url
+)
