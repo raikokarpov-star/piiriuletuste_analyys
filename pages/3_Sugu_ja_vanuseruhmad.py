@@ -30,24 +30,57 @@ def naidik(nimi, vaartus, muutus=False):
         unsafe_allow_html=True
     )
 
+
 def lae_tegelik():
     df = st.session_state["andmed_df"]
+
     c1, c2 = st.columns(2)
+
     with c1:
         grupp = vali_grupp(df, "sugu")
+
     with c2:
         kodakondsus = vali_kodakondsus(df, grupp, "sugu")
-    kaasa_2026 = st.checkbox("Kaasa 2026 tegelikud andmed (osaline aasta)", value=False,
-                              key="sugu_2026")
-    aastad = vali_aastad(df, "sugu", kaasa_2026=kaasa_2026)
+
+    kaasa_2026 = st.checkbox(
+        "Kaasa 2026 tegelikud andmed (osaline aasta)",
+        value=False,
+        key="sugu_2026"
+    )
+
+    aastad_valitud = vali_aastad(
+        df,
+        "sugu",
+        kaasa_2026=kaasa_2026
+    )
+
+    # 2026 lisamine või eemaldamine märkeruudu alusel
+    aastad = [int(a) for a in aastad_valitud if int(a) != 2026]
+
+    if kaasa_2026:
+        aastad.append(2026)
+
+    aastad = sorted(set(aastad))
+
     if not aastad:
         st.info("Vali vähemalt üks aasta.")
         st.stop()
-    d = filtreeri(df, grupp=grupp, kodakondsus=kodakondsus, aastad=aastad)
+
+    d = filtreeri(
+        df,
+        grupp=grupp,
+        kodakondsus=kodakondsus,
+        aastad=aastad
+    )
+
     if d.empty:
-        st.warning("Valitud filtritega tegelikke piiriületusi ei leitud.")
+        st.warning(
+            "Valitud filtritega tegelikke piiriületusi ei leitud."
+        )
         st.stop()
+
     return d, aastad
+
 
 def vordlus(d, aastad):
     if len(aastad) < 2:

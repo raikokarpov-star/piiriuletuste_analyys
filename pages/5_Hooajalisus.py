@@ -9,8 +9,8 @@ import streamlit as st
 
 st.title("Piiriületuste hooajalisus")
 st.caption(
-    "Tegelikud Eestisse sisenemised · 2021–2025 täisaastate hooajaline muster "
-    "ja 2026. aasta võrdlus sama perioodiga 2025. aastal"
+    "Tegelikud Eestisse sisenemised · "
+    "2021–2025 täisaastate hooajaline muster"
 )
 
 df = st.session_state["andmed_df"]
@@ -22,37 +22,58 @@ ROHELINE = "#178939"
 PUNANE = "#FF4B4B"
 HALL = "#808495"
 
-from lehe_filtrid import vali_grupp, vali_piiripunkt, grupi_mask
 
-c_gr, c_punkt = st.columns(2)
+
+from lehe_filtrid import (
+    vali_grupp,
+    vali_piiripunkt,
+    vali_aastad,
+    grupi_mask
+)
+
+c_gr, c_punkt = st.columns([1.5, 2])
+
 with c_gr:
     grupp = vali_grupp(df, "hoo")
+
 with c_punkt:
     punkt = vali_piiripunkt(df, "hoo")
 
-mask = grupi_mask(df, grupp) & df["Piiripunkti tüüp"].isin(["Maismaapiir", "Õhupiir"])
+# Ainult täisaastad 2021–2025
+aastad_valitud = vali_aastad(
+    df,
+    "hoo",
+    kaasa_2026=False
+)
+
+aastad_valitud = [
+    int(a) for a in aastad_valitud
+    if 2021 <= int(a) <= 2025
+]
+
+if not aastad_valitud:
+    st.info("Vali vähemalt üks aasta vahemikus 2021–2025.")
+    st.stop()
+
+mask = (
+    grupi_mask(df, grupp)
+    & df["Piiripunkti tüüp"].isin(
+        ["Maismaapiir", "Õhupiir"]
+    )
+)
+
 if punkt != "Kõik piiripunktid":
     mask &= df["Piiripunkt"].astype(str).eq(punkt)
-mask &= df["aasta"].isin([2021, 2022, 2023, 2024, 2025, 2026])
-aastad_valitud = [2021, 2022, 2023, 2024, 2025, 2026]
+
+mask &= df["aasta"].isin(aastad_valitud)
+
+
 
 # Eraldame ainult vajalikud veerud, mitte kogu 5+ miljoni reaga andmestiku koopiat.
 andmed = df.loc[mask, ["aasta", "kuu", "Piiripunkt"]]
 if andmed.empty:
     st.warning("Valitud filtritega puuduvad tegelikud piiriületused.")
     st.stop()
-
-# Lähteandmestiku kuu täielikkus on üldandmestiku, mitte piiratud valimi omadus.
-# Kasutame maksimaalset kuupäeva ainult 2026 võrdluse viimase kuu leidmiseks.
-max_kpv = pd.to_datetime(df["Piiriületuse kpv"].max())
-viimane_taiskuu_2026 = 0
-if pd.notna(max_kpv) and max_kpv.year >= 2026:
-    if max_kpv.year > 2026:
-        viimane_taiskuu_2026 = 12
-    else:
-        viimane_taiskuu_2026 = max_kpv.month
-        if max_kpv.day < max_kpv.days_in_month:
-            viimane_taiskuu_2026 -= 1
 
 st.caption("Hooajalisuse arvutamisel kasutatakse täisaasta kõiki 12 kuud; kuufiltrit ei rakendata.")
 
@@ -61,17 +82,17 @@ if not valitavad_aastad:
     st.warning("Vali vähemalt üks aasta vahemikus 2021–2025.")
     st.stop()
 
-c_a, c_p = st.columns([1.4, 2.6])
-with c_a:
-    valitud_hooajad = st.multiselect(
-        "Võrreldavad täisaastad",
-        options=valitavad_aastad,
-        default=valitavad_aastad,
-        key="hoo_aastad_uus",
-    )
-with c_p:
-    potentsiaalsed_punktid = sorted(str(p) for p in andmed["Piiripunkt"].dropna().unique())
-    punktide_arv = st.selectbox("Soojuskaardil kuvatavaid piiripunkte", [5, 10, 15], index=0, key="hoo_top_uus")
+
+# Kasutame ülemises filtris valitud aastaid
+valitud_hooajad = valitavad_aastad
+
+# Säilitame soojuskaardi piiripunktide arvu valiku
+punktide_arv = st.selectbox(
+    "Soojuskaardil kuvatavaid piiripunkte",
+    options=[5, 10, 15],
+    index=0,
+    key="hoo_top_uus"
+)
 
 if not valitud_hooajad:
     st.info("Vali vähemalt üks täisaasta.")
@@ -103,6 +124,7 @@ ajaloolised["Indeks"] = np.where(
 ajaloolised["Kuu"] = ajaloolised["kuu"].map(KUUD)
 ajaloolised["Aasta"] = ajaloolised["aasta"].astype(str)
 
+
 # Mõõdikud: iga kuu võrdselt kaalutud keskmine indeks valitud aastate lõikes.
 kuude_indeks = ajaloolised.groupby("kuu")["Indeks"].mean().dropna()
 if kuude_indeks.empty:
@@ -128,27 +150,71 @@ with m4:
 
 st.caption("Indeks 100 = vastava aasta keskmine kuu. Mõõdikud põhinevad valitud täisaastate kuuindeksite keskmistel.")
 
-# 1. Täisaastate hooajalise mustri võrdlus.
+
+# ---------------------------------
+# 1. HOOAJALISUSE VÕRDLUS
+# ---------------------------------
+
 st.subheader("1. Täisaastate hooajalisuse võrdlus")
+
 fig1 = px.line(
     ajaloolised,
-    x="kuu", y="Indeks", color="Aasta", markers=True,
+    x="kuu",
+    y="Indeks",
+    color="Aasta",
+    markers=True,
     custom_data=["Piiriületused"],
-    labels={"kuu": "Kuu", "Indeks": "Hooajalisuse indeks", "aasta": "Aasta"},
-    color_discrete_sequence=px.colors.qualitative.Safe,
+    labels={
+        "kuu": "Kuu",
+        "Indeks": "Hooajalisuse indeks",
+        "Aasta": "Aasta"
+    },
+    color_discrete_sequence=px.colors.qualitative.Safe
 )
+
+
 fig1.update_traces(
-    hovertemplate="Kuu: %{x}<br>Indeks: %{y:.1f}<br>Piiriületusi: %{customdata[0]:,.0f}<extra>%{fullData.name}</extra>"
+    hovertemplate=(
+        "Kuu: %{x}<br>"
+        "Indeks: %{y:.1f}<br>"
+        "Piiriületusi: %{customdata[0]:,.0f}"
+        "<extra>%{fullData.name}</extra>"
+    )
 )
-fig1.add_hline(y=100, line_dash="dash", line_color=HALL)
+
+fig1.add_hline(
+    y=100,
+    line_dash="dash",
+    line_color=HALL
+)
+
 fig1.update_layout(
-    height=430, template="plotly_white", hovermode="x unified",
-    xaxis=dict(tickmode="array", tickvals=list(KUUD), ticktext=list(KUUD.values()),
-               tickfont=dict(color="black")),
-    yaxis=dict(title="Hooajalisuse indeks", tickfont=dict(color="black")),
-    legend_title="Aasta", font=dict(family="Arial", color="black"),
+    height=430,
+    template="plotly_white",
+    hovermode="x unified",
+    xaxis=dict(
+        tickmode="array",
+        tickvals=list(KUUD),
+        ticktext=list(KUUD.values()),
+        tickfont=dict(color="black")
+    ),
+    yaxis=dict(
+        title="Hooajalisuse indeks",
+        tickfont=dict(color="black")
+    ),
+    legend_title="Aasta",
+    font=dict(family="Arial", color="black")
 )
-st.plotly_chart(fig1, use_container_width=True)
+
+
+st.plotly_chart(fig1, width="stretch")
+
+st.caption(
+    "Hooajalisuse indeks 100 = vastava täisaasta "
+    "12 kuu keskmine piiriületuste arv. "
+    "Võrdluses kasutatakse ainult aastaid 2021–2025."
+)
+
 
 # 2. Piiripunktide hooajaline muster 2021–2025.
 st.subheader("2. Piiripunktide hooajalisuse soojuskaart")
@@ -190,41 +256,6 @@ if top_punktid:
 else:
     st.info("Valitud filtritega ei ole soojuskaardi jaoks piiripunkte.")
 
-# 3. 2026 võrreldes 2025 sama kuuga – üksnes tegelikud, lõpetatud kuud.
-st.subheader("3. Muutus 2026 vs 2025 samal kuul")
-if 2026 not in aastad_valitud or 2025 not in aastad_valitud:
-    st.info("2025. ja 2026. aasta võrdlemiseks on vaja mõlema aasta tegelikke andmeid.")
-elif viimane_taiskuu_2026 < 1:
-    st.info("2026. aasta lõpetatud kuude andmeid pole veel saadaval.")
-else:
-    k = list(range(1, min(12, viimane_taiskuu_2026) + 1))
-    v25 = (kuud_koond.loc[kuud_koond["aasta"] == 2025]
-           .set_index("kuu")["Piiriületused"].reindex(k, fill_value=0))
-    v26 = (kuud_koond.loc[kuud_koond["aasta"] == 2026]
-           .set_index("kuu")["Piiriületused"].reindex(k, fill_value=0))
-    yoy = pd.DataFrame({"kuu": k, "2025": v25.to_numpy(), "2026": v26.to_numpy()})
-    yoy["Muutus (%)"] = np.where(
-        yoy["2025"] > 0,
-        (yoy["2026"] - yoy["2025"]) / yoy["2025"].replace(0, np.nan) * 100,
-        np.nan,
-    )
-    yoy["Kuu"] = yoy["kuu"].map(KUUD)
-    yoy["Värv"] = np.where(yoy["Muutus (%)"] > 0, ROHELINE,
-                            np.where(yoy["Muutus (%)"] < 0, PUNANE, HALL))
-    fig3 = go.Figure(go.Bar(
-        x=yoy["Kuu"], y=yoy["Muutus (%)"], marker_color=yoy["Värv"],
-        customdata=yoy[["2025", "2026"]].to_numpy(),
-        hovertemplate=("Kuu: %{x}<br>Muutus: %{y:+.1f}%"
-                       "<br>2025: %{customdata[0]:,.0f}"
-                       "<br>2026: %{customdata[1]:,.0f}<extra></extra>"),
-    ))
-    fig3.add_hline(y=0, line_color=HALL, line_width=1)
-    fig3.update_layout(
-        height=400, template="plotly_white", font=dict(family="Arial", color="black"),
-        xaxis_title="Kuu", yaxis_title="Muutus võrreldes 2025. aastaga (%)",
-    )
-    st.plotly_chart(fig3, use_container_width=True)
-    st.caption("Võrreldud on üksnes mõlemal aastal olemasolevaid täiskuid. Kui 2025. aasta kuu maht on null, on protsentuaalne muutus määramata.")
 
 with st.expander("Detailne hooajalisuse andmetabel ja metoodika", expanded=False):
     st.dataframe(

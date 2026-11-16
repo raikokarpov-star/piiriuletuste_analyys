@@ -13,16 +13,36 @@ df = st.session_state["andmed_df"]
 
 from lehe_filtrid import vali_grupp, vali_piiripunkt, vali_aastad, grupi_mask
 
-c1, c2, c3 = st.columns([1.5, 2, 1.5])
+
+# Riikide grupi ja piiripunkti filtrid
+c1, c2 = st.columns([1.5, 2])
+
 with c1:
     grupp = vali_grupp(df, "ulev", koik=True)
+
 with c2:
     punkt_valik = vali_piiripunkt(df, "ulev")
-with c3:
-    aasta_2026 = st.checkbox("Lisa 2026 tegelikud andmed", value=False, key="ulev_2026")
 
-aastad_valitud = vali_aastad(df, "ulev", kaasa_2026=aasta_2026)
-lubatud_aastad = aastad_valitud
+# 2026 märkeruut aastate filtri kohal
+aasta_2026 = st.checkbox(
+    "Lisa 2026 tegelikud andmed",
+    value=False,
+    key="ulev_2026"
+)
+
+# Aastate filter
+aastad_valitud = vali_aastad(
+    df,
+    "ulev",
+    kaasa_2026=aasta_2026
+)
+
+# Lisa või eemalda 2026 automaatselt märkeruudu järgi
+lubatud_aastad = [a for a in aastad_valitud if a != 2026]
+
+if aasta_2026:
+    lubatud_aastad.append(2026)
+
 if not lubatud_aastad:
     st.info("Vali vähemalt üks aasta.")
     st.stop()
