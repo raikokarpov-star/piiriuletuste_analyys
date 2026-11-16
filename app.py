@@ -32,4 +32,38 @@ leht = st.navigation([
     st.Page("pages/2_Prognoos_ja_mudelite_vordlus.py", title="Prognoos ja mudelid", icon="📈"),
 ])
 
+
+# ---------------------------------
+# GITHUBI QR-KOOD KÜLGPANEELIS
+# ---------------------------------
+
+import qrcode
+
+github_url = "https://github.com/raikokarpov-star/piiriuletuste_analyys"
+
+with st.sidebar:
+    st.divider()
+    st.markdown("**Projekti lähtekood GitHubis**")
+
+    qr = qrcode.QRCode(
+        box_size=8,
+        border=2
+    )
+    qr.add_data(github_url)
+    qr.make(fit=True)
+
+    qr_pilt = qr.make_image(
+        fill_color="black",
+        back_color="white"
+    ).convert("RGB")
+
+    st.image(qr_pilt, width=150)
+
+    st.link_button(
+        "Ava GitHubis",
+        github_url,
+        width="stretch"
+    )
+
+
 leht.run()
