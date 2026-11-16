@@ -179,6 +179,7 @@ Kodakondsus on oluline tunnus piiriületuste struktuuri analüüsimisel, kuid se
 Prognoosimudelid põhinevad ajaloolistel andmetel ja neis kasutatud tunnustel. Geopoliitilised sündmused, ootamatud piirangud ja muud järsud muutused võivad prognoositäpsust mõjutada. Samuti sõltub väliseid tunnuseid kasutavate mudelite prognoosivõime sellest, kas prognoosiperioodi kohta on olemas piisavalt usaldusväärne ja õigel ajal teada olnud info.
 """)
 
+
 # ---------------------------------
 # 3. ANALÜÜS JA TULEMUSED
 # ---------------------------------
@@ -188,37 +189,113 @@ st.subheader("3. Analüüs ja tulemused")
 st.markdown("**3.1 Piiriületuste dünaamika**")
 
 st.write("""
-- Piiriületuste aastane ja kuine maht ning muutused aastatel 2021–2025.
-- Ajalised ja hooajalised mustrid.
-- Maismaa- ja õhupiiri kaudu toimunud piiriületuste võrdlus.
+Aastatel 2021–2025 suurenes kolmandate riikide kodanike registreeritud
+Eestisse sisenemiste arv 25,2%, samal ajal kui kõigi riikide gruppide
+piiriületuste arv suurenes 69,1%.
+
+See erinevus näitab, et üldise piiriületuste mahu kasv ei tähenda
+samaväärset kasvu kolmandate riikide kodanike seas. Seetõttu tuleb
+piiriületuste dünaamikat hinnata eraldi riikide gruppide ja piiripunktide
+lõikes, mitte piirduda riikliku koguarvuga.
+
+Piiripunktide võrdluses ilmnesid märkimisväärsed muutused. Näiteks
+Narva-1 piiripunktis vähenes registreeritud sisenemiste arv
+aastatel 2024–2025 ligikaudu 40,3% ehk 196 816 piiriületuse võrra.
+
+Sellised muutused viitavad vajadusele jälgida piiripunktide
+töökoormuse ümberjaotumist ning võrrelda dünaamikat ka hooajaliste
+ja töökorralduslike teguritega.
 """)
 
 st.markdown("**3.2 Piiriületuste struktuur**")
 
 st.write("""
-- Piiriületuste jaotus kodakondsuse ja riikide gruppide lõikes.
-- Sooline ja vanuseline struktuur.
-- Piiripunktide kasutamise intensiivsus ja osakaalud.
-- Struktuurimuutused aastatel 2021–2025.
+Piiriületuste struktuuri analüüs näitas, et eri kodakondsustega
+isikute sisenemiste mahud, ajalised muutused ja kasutatavad
+piiripunktid võivad märkimisväärselt erineda.
+
+Kodakondsuste võrdluses väärivad täiendavat tähelepanu näiteks
+Serbia ja Iisraeli kodanike piiriületuste mahu kasv ning
+maismaapiiri kasutamise osakaal.
+
+Soolise ja vanuselise struktuuri analüüs võimaldab täiendavalt
+kirjeldada piiriületuste koosseisu ning jälgida, kas muutused
+piiripunktides puudutavad erinevaid rahvastikurühmi sarnaselt
+või erinevalt.
+
+Oluline on eristada piiriületuste arvu isikute arvust:
+üks inimene võib vaadeldaval perioodil piiri ületada korduvalt.
+
+Registreeritud kodakondsus kirjeldab andmestikus esitatud
+kodakondsust, kuid ei võimalda tuvastada inimese võimalikku
+mitmikkodakondsust. Seetõttu ei saa üksnes kodakondsuste ja
+piiripunktide kasutusmustrite põhjal teha järeldusi
+isikute julgeolekuriski kohta.
 """)
 
-st.markdown("**3.3 Geopoliitiliste sündmuste ja korralduslike meetmete võimalik seos**")
+st.markdown(
+    "**3.3 Geopoliitiliste sündmuste ja korralduslike meetmete võimalik seos**"
+)
 
 st.write("""
-- Geopoliitiliste sündmuste võimalik seos piiriületuste muutustega.
-- Piiripunktide lahtiolekuaegade, ajutiste piirangute ja töökorralduse muudatuste mõju hindamine.
-- Automaatsete kontrollisüsteemide kasutuselevõtuga seotud muutused.
+Piiriületuste ajalises dünaamikas esinevaid muutusi tuleb
+tõlgendada koos geopoliitilise olukorra ning Eesti riigipiiril
+rakendatud korralduslike ja õiguslike meetmetega.
+
+Vaadeldavat perioodi mõjutasid muu hulgas Venemaa täiemahuline
+sõda Ukrainas, Venemaa ja Valgevene kodanikele kehtestatud
+piirangud ning piiripunktide töökorralduse muudatused.
+
+Prognoosimudelite jaoks loodi kaheksa sündmuste ja korralduslike
+meetmetega seotud tunnust. Need kirjeldavad muu hulgas
+piiripunktide lahtiolekut, ajutist piirikontrolli,
+sõidukipiiranguid ja automaatsete kontrollisüsteemide
+kasutuselevõttu.
+
+Tunnused võimaldavad analüüsida, kas teadaolevate sündmuste
+ja meetmete kehtivusperioodid langevad ajaliselt kokku
+piiriületuste mahu muutustega.
+
+Samas ei tõenda ajaline kokkulangevus põhjuslikku seost.
+Näiteks võib piiriületuste vähenemine olla seotud mitme
+samaaegselt toimiva teguriga, mida kasutatav andmestik
+ei võimalda üksteisest täielikult eristada.
+
+Seetõttu käsitletakse tuvastatud muutusi täiendavat
+uurimist vajavate tähelepanekutena, mitte tõendina
+konkreetse meetme otsesest mõjust.
 """)
 
 st.markdown("**3.4 Piiriületuste prognoos aastateks 2026–2027**")
 
 st.write("""
-- Prognoosimudelite A1–A9 võrdlus ja valideerimine.
-- Mudelite prognoositäpsuse hindamine MAE ja WAPE mõõdikute abil.
-- A7 SARIMAX-mudeli väliste tunnuste mõju hindamine.
-- A9 mudeli prognoosivõime võrdlus teiste mudelitega.
-- 2026. aasta novembri–detsembri ja 2027. aasta prognoos.
-- Piiripunktide, riikide gruppide ja hooajalisuse prognoositavad muutused.
+Piiriületuste edasise dünaamika hindamiseks koostati ja
+võrreldi erinevaid prognoosimudeleid, sealhulgas
+A7 SARIMAX-mudelit ja A9 mudelit.
+
+Mudelite hindamisel kasutati ajalist tagasitestimist,
+mille korral mudelid treeniti ainult prognoositavale
+perioodile eelnenud andmetel.
+
+A7 mudeli 46-kuulise tagasitestimise tulemuseks oli
+keskmine absoluutviga (MAE) 15 838,66 piiriületust
+ja kaalutud absoluutne protsentviga (WAPE) 18,12%.
+
+A9 mudeli 18-kuulise treeningaknaga katse WAPE oli 26,45%.
+Neid tulemusi ei saa siiski automaatselt käsitleda
+mudelite lõpliku järjestusena, kui hindamisperioodid
+või prognoositingimused erinevad.
+
+Tulemused näitavad, et keerukama mudeli kasutamine
+ei taga iseenesest väiksemat prognoosiviga.
+
+2026. aasta jaanuari–oktoobri registreeritud sisenemised
+on tegelikud andmed. Novembrit ja detsembrit ning
+2027. aastat käsitletakse prognoosiperioodina.
+
+Prognoose saab kasutada piiripunktide võimalike
+koormusmuutuste jälgimiseks, kuid need ei kirjelda
+kindlalt tulevikus realiseeruvaid piiriületuste mahtusid.
 """)
 
 # ---------------------------------
@@ -227,13 +304,109 @@ st.write("""
 
 st.subheader("4. Arutelu ja kokkuvõte")
 
+st.markdown("**4.1 Tulemuste tõlgendamine**")
+
 st.write("""
-Arutelus seostatakse analüüsi ja prognooside tulemused uurimistöö eesmärgi ning uurimisprobleemiga. Hinnatakse, millised muutused olid piiriületuste dünaamikas ja struktuuris kõige olulisemad aastatel 2021–2025 ning milliste geopoliitiliste sündmuste või Eesti siseriiklike korralduslike meetmetega võisid need muutused ajaliselt seostuda.
+Uurimistöö tulemused osutavad, et Eesti riigipiiril
+registreeritud sisenemiste koguarv ei anna üksinda
+piisavat ülevaadet kolmandate riikide kodanike
+piiriületuste dünaamikast ja struktuurist.
 
-Samuti hinnatakse, millised piiripunktid vajavad piiriületuste mahu, struktuuri ja prognoosivigade põhjal suuremat tähelepanu. Prognooside puhul käsitletakse mudelite prognoosivõimet, nende tugevusi ja piiranguid ning 2026.–2027. aasta prognoositud arengusuundi.
+Kolmandate riikide kodanike piiriületuste kasv erines
+märkimisväärselt kõigi riikide gruppide kogukasvust.
+Samuti ilmnesid üksikute piiripunktide lõikes
+suured muutused, mida riiklik kogunäitaja võib varjata.
 
-Kokkuvõttes esitatakse uurimistöö peamised tulemused ja järeldused ning vastatakse uurimisprobleemile ja alaprobleemile. Eraldi tuuakse välja registreeritud kodakondsuse kasutamisega seotud piirangud ning rõhutatakse, et piiriületuste arv ja kodakondsus ei ole iseseisvalt piisavad näitajad julgeolekuriski hindamiseks.
+Narva-1 piiripunktis toimunud oluline vähenemine
+näitab, miks piiripunktide töökoormust tuleb hinnata
+eraldi ning võrrelda seda varasemate perioodidega.
+
+Geopoliitilised sündmused ja riigisisesed korralduslikud
+meetmed annavad muutuste tõlgendamiseks olulise tausta.
+Samas ei võimalda kirjeldav andmeanalüüs määrata,
+millise osa muutusest põhjustas konkreetne sündmus
+või piirang.
 """)
+
+st.markdown("**4.2 Vastus uurimisprobleemile**")
+
+st.write("""
+Geopoliitilised sündmused ja Eesti siseriiklikud
+korralduslikud meetmed võivad piiriületusandmetes
+kajastuda nii sisenemiste koguarvu muutumisena kui ka
+erinevustena kodakondsuste, piiripunktide ja
+ajaperioodide lõikes.
+
+Piiriületuste dünaamika ja struktuuri analüüs
+võimaldab tuvastada piiripunkte, kus esinevad
+ebatavaliselt suured muutused, koormuse
+ümberjaotumine või prognoosist kõrvalekaldumised.
+
+Sellised tähelepanekud annavad aluse täiendavaks
+kontrolliks ning töökorralduslike otsuste kaalumiseks,
+kuid ei tõenda iseenesest julgeolekuohu olemasolu.
+""")
+
+st.markdown("**4.3 Vastus alaprobleemile**")
+
+st.write("""
+PPA andmestikus registreeritud kodakondsus on
+kasulik piiriületuste struktuuri kirjeldamiseks,
+kuid selle põhjal ei saa kindlaks teha isiku
+kõiki võimalikke kodakondsusi.
+
+Kui inimesel on mitu kodakondsust, ei pruugi
+ühes piiriületuskirjes esitatud kodakondsus
+kajastada tema kogu kodakondsuslikku tausta.
+
+Seetõttu ei võimalda kasutatav andmestik hinnata
+mitmikkodakondsuse tegelikku levimust ega selle
+võimalikku seost piiriületuste mustritega.
+
+Registreeritud kodakondsus ei ole iseseisvalt
+piisav alus julgeolekuriski määramiseks.
+""")
+
+st.markdown("**4.4 Praktilised soovitused**")
+
+st.markdown("""
+1. **Jälgida piiriületusi piiripunktide kaupa.**
+   Riikliku koguarvu kõrval tuleb regulaarselt analüüsida
+   üksikute piiripunktide sisenemiste mahtu, muutust
+   ja osakaalu.
+
+2. **Võrrelda muutusi teadaolevate sündmuste ja meetmetega.**
+   Oluliste kõrvalekallete korral tuleb kontrollida
+   piiripunktide töökorraldust, piirangute kehtivust,
+   hooajalisust ja muid võimalikke mõjutegureid.
+
+3. **Kasutada prognoose töökoormuse seire abivahendina.**
+   Tegelike sisenemiste ja prognooside erinevusi
+   tuleks jälgida samade riikide gruppide,
+   piiritüüpide ja piiripunktide lõikes.
+   Suuremad kõrvalekalded võivad viidata
+   täiendava analüüsi vajadusele.
+""")
+
+st.markdown("**4.5 Kokkuvõttev järeldus**")
+
+st.write("""
+Uurimistöö peamine järeldus on, et piiriületuste
+koguarvu jälgimisest ei piisa Eesti riigipiiril
+toimuvate muutuste mõistmiseks.
+
+Piiriületuste ajalise dünaamika, kodakondsusliku
+struktuuri, piiripunktide kasutamise ja prognooside
+ühine analüüs loob parema aluse tähelepanu vajavate
+muutuste varajaseks tuvastamiseks.
+
+Analüüsi tulemused võivad toetada piirikontrolli
+töökorralduse ja ressursside planeerimist,
+kuid nende põhjal ei saa üksi teha järeldusi
+ebaseadusliku rände, konkreetsete isikute
+või piiripunktide julgeolekuriski kohta.
+""")
+
 
 # ---------------------------------
 # 5. TEHISARU KASUTAMINE
