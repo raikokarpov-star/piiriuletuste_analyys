@@ -39,6 +39,22 @@ with c_gr:
 with c_punkt:
     punkt = vali_piiripunkt(df, "hoo")
 
+# Kodakondsuse filter riikide grupi valiku all
+kodakondsused = sorted(
+    df.loc[
+        grupi_mask(df, grupp)
+        & df["Piiripunkti tüüp"].isin(["Maismaapiir", "Õhupiir"]),
+        "Kodakondsus"
+    ].dropna().astype(str).unique().tolist()
+)
+
+with c_gr:
+    kodakondsus = st.selectbox(
+        "Kodakondsus",
+        options=["Kõik kodakondsused"] + kodakondsused,
+        key="hoo_kodakondsus"
+    )
+
 # Ainult täisaastad 2021–2025
 aastad_valitud = vali_aastad(
     df,
@@ -64,6 +80,9 @@ mask = (
 
 if punkt != "Kõik piiripunktid":
     mask &= df["Piiripunkt"].astype(str).eq(punkt)
+
+if kodakondsus != "Kõik kodakondsused":
+    mask &= df["Kodakondsus"].astype(str).eq(kodakondsus)
 
 mask &= df["aasta"].isin(aastad_valitud)
 
