@@ -152,7 +152,7 @@ with st.expander("Vaata Bulgaaria, Rumeenia ja Horvaatia klassifikatsiooni graaf
     )
     joonis.update_xaxes(tickformat="%Y", title_text="Aeg", row=3, col=1)
     joonis.update_yaxes(title_text="Piiriületusi")
-    st.plotly_chart(joonis, use_container_width=True)
+    st.plotly_chart(joonis, width="stretch")
     st.caption(
         "Punane katkendjoon tähistab Schengeni liikmesuse algust. "
         "Graafik kasutab kogu PPA andmestikku, mitte külgribal valitud filtreid. "

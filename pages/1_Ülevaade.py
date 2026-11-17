@@ -157,7 +157,7 @@ fig = px.line(kuukoond, x="Kuupäev", y="Piiriületusi", markers=True,
 fig.update_traces(line_color="#178939", marker_size=5)
 fig.update_layout(height=435, xaxis_title="Aeg", yaxis_title="Piiriületusi",
                   hovermode="x unified", font=dict(family="Arial"))
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 st.subheader("Piiripunktide dünaamika")
 punktide_suurused = (punktikuud.groupby("Piiripunkt", observed=True)["Piiriületusi"]
@@ -189,7 +189,7 @@ if valitud_jooned:
 
     trace.legendgroup = trace.name
     fig_p.update_layout(legend_title_text="")
-    st.plotly_chart(fig_p, use_container_width=True)
+    st.plotly_chart(fig_p, width="stretch")
 else:
     st.info("Vali vähemalt üks piiripunkt.")
 

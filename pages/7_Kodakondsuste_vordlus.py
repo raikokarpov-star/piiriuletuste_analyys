@@ -170,7 +170,7 @@ fig.update_layout(height=max(430, len(plot_df) * 34 + 140), xaxis_title=naidik +
                   font=dict(family="Arial", color="black", size=13), showlegend=False)
 fig.update_xaxes(tickfont=dict(color="black"), title_font=dict(color="black"))
 fig.update_yaxes(tickfont=dict(color="black"))
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 st.markdown("#### Muutused aastate lõikes")
 aasta_koond = (valitud.groupby(["aasta", "Kodakondsus"], observed=True).size()
@@ -179,14 +179,14 @@ fig_a = px.line(aasta_koond, x="aasta", y="Piiriületused", color="Kodakondsus",
 fig_a.update_layout(height=460, font=dict(family="Arial", color="black"),
                     xaxis=dict(dtick=1, tickfont=dict(color="black")),
                     yaxis=dict(tickfont=dict(color="black")), legend_title="Kodakondsus")
-st.plotly_chart(fig_a, use_container_width=True)
+st.plotly_chart(fig_a, width="stretch")
 
 st.markdown("#### Maismaa- ja õhupiiri võrdlus")
 tyyp_koond = (valitud.groupby(["Kodakondsus", "Piiripunkti tüüp"], observed=True).size()
               .reset_index(name="Piiriületused"))
 fig_t = px.bar(tyyp_koond, x="Kodakondsus", y="Piiriületused", color="Piiripunkti tüüp", barmode="stack")
 fig_t.update_layout(height=450, font=dict(family="Arial", color="black"), xaxis_tickangle=-35)
-st.plotly_chart(fig_t, use_container_width=True)
+st.plotly_chart(fig_t, width="stretch")
 
 st.markdown("#### Piiripunktide võrdlus")
 punkt_koond = (valitud.groupby(["Piiripunkt", "Kodakondsus"], observed=True).size()
@@ -196,11 +196,11 @@ top_punktid = punkt_koond.groupby("Piiripunkt", observed=True)["Piiriületused"]
 punkt_koond = punkt_koond.loc[punkt_koond["Piiripunkt"].isin(top_punktid)]
 fig_p = px.bar(punkt_koond, x="Piiripunkt", y="Piiriületused", color="Kodakondsus", barmode="group")
 fig_p.update_layout(height=490, font=dict(family="Arial", color="black"), xaxis_tickangle=-30)
-st.plotly_chart(fig_p, use_container_width=True)
+st.plotly_chart(fig_p, width="stretch")
 
 st.markdown("#### Täpne võrdlustabel")
 tabel = valitud_koond[["Kodakondsus", "Koguarv", "Algus", "Lõpp", "Absoluutne muutus", "Protsentuaalne muutus", "Keskmine aastane kasv (%)"]].copy()
-st.dataframe(tabel, use_container_width=True, hide_index=True,
+st.dataframe(tabel, width="stretch", hide_index=True,
              column_config={"Protsentuaalne muutus": st.column_config.NumberColumn(format="%.1f%%"),
                             "Keskmine aastane kasv (%)": st.column_config.NumberColumn(format="%.1f%%")})
 st.download_button("Laadi võrdlustabel CSV-na", tabel.to_csv(index=False).encode("utf-8-sig"),

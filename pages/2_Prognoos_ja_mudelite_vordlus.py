@@ -76,7 +76,7 @@ with c1:
     fig_w.update_layout(height=430, font=dict(family="Arial", color="black"),
                         xaxis=dict(dtick=2), yaxis=dict(rangemode="tozero"),
                         margin=dict(t=60, b=40))
-    st.plotly_chart(fig_w, use_container_width=True)
+    st.plotly_chart(fig_w, width="stretch")
 with c2:
     fig_a = px.bar(
         a7.sort_values("Testaasta"), x="Testaasta", y="WAPE", text="WAPE",
@@ -87,7 +87,7 @@ with c2:
     fig_a.update_layout(height=430, font=dict(family="Arial", color="black"),
                         xaxis=dict(dtick=1), yaxis=dict(rangemode="tozero"),
                         margin=dict(t=60, b=40))
-    st.plotly_chart(fig_a, use_container_width=True)
+    st.plotly_chart(fig_a, width="stretch")
 
 st.caption("A7 ja A9 võrdlus on suunav: A9 kasutab treeningakende katset ning täielikku mudelite A1–A9 edetabelit ei saa ilma teiste mudelite tagasitestimise tulemusteta koostada.")
 
@@ -326,15 +326,15 @@ if not punktid_2027.empty:
                    color_discrete_map={"A7": ROHELINE, "A9": ORANZ},
                    title="2027 · prognoositud piiriületused TOP 5 piiripunktis")
     fig_t.update_layout(height=440, font=dict(family="Arial", color="black"), xaxis_title="", yaxis_title="Piiriületusi", margin=dict(t=65))
-    st.plotly_chart(fig_t, use_container_width=True)
+    st.plotly_chart(fig_t, width="stretch")
 else:
     st.info("Valitud filtritega prognoosiandmeid ei leitud.")
 
 with st.expander("Tagasitestimise tabelid ja piirangud", expanded=False):
     st.markdown("**A7: tulemused aastati**")
-    st.dataframe(a7, hide_index=True, use_container_width=True)
+    st.dataframe(a7, hide_index=True, width="stretch")
     st.markdown("**A9: treeningakende kokkuvõte**")
-    st.dataframe(a9_koond, hide_index=True, use_container_width=True)
+    st.dataframe(a9_koond, hide_index=True, width="stretch")
     st.markdown("**A9: katsed aasta ja treeningakna järgi**")
-    st.dataframe(a9, hide_index=True, use_container_width=True)
+    st.dataframe(a9, hide_index=True, width="stretch")
     st.caption("2026. aasta test hõlmab 10 kuud. WAPE ei väljenda üksikute inimeste riski. Ilma A1–A6/A8 hindamistulemusteta ei saa koostada täielikku A1–A9 võrdlust.")

@@ -145,7 +145,7 @@ fig = px.bar(koond, x="Vanuserühm", y="Piiriületused", color="Sugu",
              color_discrete_map={"Mees":SININE,"Naine":ORANZ},
              hover_data={"Piiriületused":":,.0f"})
 fig.update_layout(xaxis_title="Vanuserühm", yaxis_title="Piiriületuste arv", legend_title="Sugu")
-st.plotly_chart(kujunda(fig), use_container_width=True)
+st.plotly_chart(kujunda(fig), width="stretch")
 
 st.subheader("Meeste ja naiste osakaalu muutumine ajas")
 kuud = (s.groupby(["aasta","kuu","Sugu"], observed=True).size().reset_index(name="Arv"))
@@ -156,11 +156,11 @@ fig2 = px.line(kuud.sort_values("Kuupäev"),x="Kuupäev",y="Osakaal (%)", color=
                hover_data={"Arv":":,.0f","Osakaal (%)":":.1f"})
 fig2.add_hline(y=50,line_dash="dot",line_color="#888888")
 fig2.update_layout(xaxis_title="Aeg",yaxis_title="Osakaal teadaoleva sooga piiriületustest (%)", yaxis_range=[0,100])
-st.plotly_chart(kujunda(fig2), use_container_width=True)
+st.plotly_chart(kujunda(fig2), width="stretch")
 
 with st.expander("Detailne vanuserühmade tabel ja eksport", expanded=False):
     tabel = koond.pivot_table(index="Vanuserühm",columns="Sugu",values="Piiriületused",fill_value=0,observed=True).reset_index()
-    st.dataframe(tabel, use_container_width=True, hide_index=True)
+    st.dataframe(tabel, width="stretch", hide_index=True)
     st.download_button("Laadi CSV alla", tabel.to_csv(index=False).encode("utf-8-sig"),
                        "sugu_vanuseruhmad.csv", "text/csv")
 st.caption("Mõõdikud kajastavad piiriületusi, mitte unikaalseid isikuid. Meeste ja naiste osakaal on arvutatud teadaoleva sooga kirjete hulgas. Kodakondsus ei näita isiku hoiakuid ega julgeolekuriski.")

@@ -251,7 +251,7 @@ if top_punktid:
         xaxis_title="Kuu", yaxis_title="", yaxis_autorange="reversed",
         margin=dict(l=20, r=20, t=30, b=30),
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")
     st.caption("Soojuskaart kuvab piiripunkti aastapõhiste indeksite keskmist. Nulliga täidetud kuud võivad tähendada ka punktis tegevuse puudumist; põhjus ei selgu avaandmetest.")
 else:
     st.info("Valitud filtritega ei ole soojuskaardi jaoks piiripunkte.")
@@ -262,7 +262,7 @@ with st.expander("Detailne hooajalisuse andmetabel ja metoodika", expanded=False
         ajaloolised[["aasta", "Kuu", "Piiriületused", "Indeks"]].rename(
             columns={"aasta": "Aasta", "Indeks": "Hooajalisuse indeks"}
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={"Hooajalisuse indeks": st.column_config.NumberColumn(format="%.1f")},
     )

@@ -141,7 +141,7 @@ fig = px.bar(val,x="Piiripunkti tüüp",y="Piiriületused", color="Piiripunkti t
              text="Piiriületused", category_orders={"Piiripunkti tüüp":piirid})
 fig.update_traces(texttemplate="%{text:,.0f}",textposition="outside",cliponaxis=False)
 fig.update_layout(showlegend=False,xaxis_title="Piiripunkti tüüp",yaxis_title="Piiriületuste arv")
-st.plotly_chart(kujunda(fig,410),use_container_width=True)
+st.plotly_chart(kujunda(fig,410),width="stretch")
 
 st.subheader("Piiritüüpide osakaalu muutumine ajas")
 kuukoond = (d.groupby(["aasta","kuu","Piiripunkti tüüp"], observed=True).size().reset_index(name="Arv"))
@@ -150,7 +150,7 @@ kuukoond["Osakaal (%)"] = kuukoond["Arv"] / kuukoond.groupby("Kuupäev")["Arv"].
 fig2 = px.line(kuukoond.sort_values("Kuupäev"), x="Kuupäev", y="Osakaal (%)", color="Piiripunkti tüüp",
                color_discrete_map={"Maismaapiir":ROHELINE,"Õhupiir":SININE})
 fig2.update_layout(xaxis_title="Aeg",yaxis_title="Piiritüübi osakaal (%)",yaxis_range=[0,100],legend_title=None)
-st.plotly_chart(kujunda(fig2),use_container_width=True)
+st.plotly_chart(kujunda(fig2),width="stretch")
 
 with st.expander("Piiripunktide detailvõrdlus", expanded=False):
     punktid = (d.groupby(["Piiripunkt","Piiripunkti tüüp"],observed=True)
@@ -159,8 +159,8 @@ with st.expander("Piiripunktide detailvõrdlus", expanded=False):
     fig3 = px.bar(top,y="Piiripunkt",x="Piiriületused",orientation="h",color="Piiripunkti tüüp",
                   color_discrete_map={"Maismaapiir":ROHELINE,"Õhupiir":SININE})
     fig3.update_layout(xaxis_title="Piiriületuste arv",yaxis_title="",legend_title=None)
-    st.plotly_chart(kujunda(fig3,450),use_container_width=True)
-    st.dataframe(punktid,use_container_width=True,hide_index=True)
+    st.plotly_chart(kujunda(fig3,450),width="stretch")
+    st.dataframe(punktid,width="stretch",hide_index=True)
     st.download_button("Laadi CSV alla",punktid.to_csv(index=False).encode("utf-8-sig"),
                        "piiripunktide_vordlus.csv","text/csv")
 st.caption("Piiriületuste arvu muutus ei tõenda iseenesest geopoliitilise sündmuse või piirimeetme põhjuslikku mõju.")
