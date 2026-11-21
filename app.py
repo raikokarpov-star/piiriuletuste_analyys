@@ -65,13 +65,17 @@ leht = st.navigation({
 
     "Edasiarendus": [
         st.Page(
+            "pages/3_Sisenemised_ja_valjumised.py",
+            title="Sisenemised ja väljumised – ülevaade",
+            icon="📊"
+        ),
+        st.Page(
             "pages/8_Edasianaluus_prognoosid.py",
             title="Sisenemised ja väljumised – prognoosid",
             icon="📉"
         ),
     ]
 })
-
 
 # ---------------------------------
 # GITHUBI QR-KOOD KÜLGPANEELIS
