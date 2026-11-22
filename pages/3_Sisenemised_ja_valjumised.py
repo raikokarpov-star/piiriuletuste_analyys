@@ -29,7 +29,7 @@ st.markdown("""
 /* Fikseeritud mõõdikuriba */
 .st-key-sv_sticky_metrics {
     position: fixed !important;
-    top: 7rem !important;
+    top: 3.5rem !important;
 
     left: calc(21rem + 1vw) !important;
     right: 3rem !important;
@@ -66,7 +66,7 @@ st.markdown("""
 
 /* Jätame pealkirjale ja filtritele ruumi */
 [data-testid="stMainBlockContainer"] {
-    padding-top: 11rem !important;
+    padding-top: 9rem !important;
 }
 
 /* Viie mõõdiku paigutus */
@@ -167,6 +167,27 @@ def lae_liikumiste_andmed():
 
 
 andmed = lae_liikumiste_andmed()
+
+
+@st.cache_resource(show_spinner="Laen päevapõhiseid andmeid...")
+def lae_paevased_andmed():
+    """Laeme päevapõhised koondfailid ainult nädalapäeva vaate jaoks.
+
+    Cache resource jagab sama ainult-loetavat objekti rerun'ide vahel.
+    """
+    filtriveerud = [
+        "aasta", "nadalapaev", "Piiripunkti tüüp", "Piiripunkt",
+        "Kodakondsus", "Riikide grupp", "Sugu", "Vanuserühm",
+    ]
+    sis = pd.read_parquet(
+        ANDMEKAUST / "sisenemised_paevad_2016_2026.parquet",
+        columns=filtriveerud + ["Piiriületajate arv"],
+    )
+    val = pd.read_parquet(
+        ANDMEKAUST / "valjumised_paevad_2016_2026.parquet",
+        columns=filtriveerud + ["Piirilt lahkujate arv"],
+    )
+    return sis, val
 
 
 # ------------------------------------------
@@ -738,380 +759,1796 @@ with sticky_riba:
         )
 
 # ------------------------------------------
-# KUUDE DÜNAAMIKA
+# B. KODAKONDSUSTE MAAILMAKAART – TOP 20
+# ------------------------------------------
+
+import unicodedata
+import numpy as np
+
+KODAKONDSUS_ISO3 = {
+    'abw': 'ABW',
+    'ad': 'AND',
+    'ae': 'ARE',
+    'af': 'AFG',
+    'afg': 'AFG',
+    'afganistan': 'AFG',
+    'afghanistan': 'AFG',
+    'ag': 'ATG',
+    'ago': 'AGO',
+    'ahvenamaa': 'ALA',
+    'ai': 'AIA',
+    'aia': 'AIA',
+    'al': 'ALB',
+    'ala': 'ALA',
+    'aland islands': 'ALA',
+    'alb': 'ALB',
+    'albaania': 'ALB',
+    'albania': 'ALB',
+    'algeria': 'DZA',
+    'alzeeria': 'DZA',
+    'am': 'ARM',
+    'ameerika samoa': 'ASM',
+    'ameerika uhendriigid': 'USA',
+    'american samoa': 'ASM',
+    'and': 'AND',
+    'andorra': 'AND',
+    'angola': 'AGO',
+    'anguilla': 'AIA',
+    'antarctica': 'ATA',
+    'antarktika': 'ATA',
+    'antigua and barbuda': 'ATG',
+    'antigua ja barbuda': 'ATG',
+    'ao': 'AGO',
+    'aq': 'ATA',
+    'ar': 'ARG',
+    'araabia uhendemiraadid': 'ARE',
+    'arab republic of egypt': 'EGY',
+    'are': 'ARE',
+    'arg': 'ARG',
+    'argentina': 'ARG',
+    'argentine republic': 'ARG',
+    'arm': 'ARM',
+    'armeenia': 'ARM',
+    'armenia': 'ARM',
+    'aruba': 'ABW',
+    'as': 'ASM',
+    'aserbaidzaan': 'AZE',
+    'asm': 'ASM',
+    'at': 'AUT',
+    'ata': 'ATA',
+    'atf': 'ATF',
+    'atg': 'ATG',
+    'au': 'AUS',
+    'aus': 'AUS',
+    'austraalia': 'AUS',
+    'australia': 'AUS',
+    'austria': 'AUT',
+    'aut': 'AUT',
+    'aw': 'ABW',
+    'ax': 'ALA',
+    'az': 'AZE',
+    'aze': 'AZE',
+    'azerbaijan': 'AZE',
+    'ba': 'BIH',
+    'bahama': 'BHS',
+    'bahamas': 'BHS',
+    'bahrain': 'BHR',
+    'bahrein': 'BHR',
+    'bangladesh': 'BGD',
+    'barbados': 'BRB',
+    'bb': 'BRB',
+    'bd': 'BGD',
+    'bdi': 'BDI',
+    'be': 'BEL',
+    'bel': 'BEL',
+    'belarus': 'BLR',
+    'belau': 'PLW',
+    'belgia': 'BEL',
+    'belgium': 'BEL',
+    'belize': 'BLZ',
+    'ben': 'BEN',
+    'benin': 'BEN',
+    'bermuda': 'BMU',
+    'bes': 'BES',
+    'bf': 'BFA',
+    'bfa': 'BFA',
+    'bg': 'BGR',
+    'bgd': 'BGD',
+    'bgr': 'BGR',
+    'bh': 'BHR',
+    'bhr': 'BHR',
+    'bhs': 'BHS',
+    'bhutan': 'BTN',
+    'bi': 'BDI',
+    'bih': 'BIH',
+    'bj': 'BEN',
+    'bl': 'BLM',
+    'blm': 'BLM',
+    'blr': 'BLR',
+    'blz': 'BLZ',
+    'bm': 'BMU',
+    'bmu': 'BMU',
+    'bn': 'BRN',
+    'bo': 'BOL',
+    'bol': 'BOL',
+    'boliivia': 'BOL',
+    'bolivarian republic of venezuela': 'VEN',
+    'bolivia, plurinational state of': 'BOL',
+    'bonaire, sint eustatius and saba': 'BES',
+    'bosnia and herzegovina': 'BIH',
+    'bosnia ja hertsegoviina': 'BIH',
+    'botswana': 'BWA',
+    'bouvet island': 'BVT',
+    'bouvet’ saar': 'BVT',
+    'bq': 'BES',
+    'br': 'BRA',
+    'bra': 'BRA',
+    'brasiilia': 'BRA',
+    'brazil': 'BRA',
+    'brb': 'BRB',
+    'briti india ookeani ala': 'IOT',
+    'briti neitsisaared': 'VGB',
+    'british indian ocean territory': 'IOT',
+    'british virgin islands': 'VGB',
+    'brn': 'BRN',
+    'brunei': 'BRN',
+    'brunei darussalam': 'BRN',
+    'bs': 'BHS',
+    'bt': 'BTN',
+    'btn': 'BTN',
+    'bulgaaria': 'BGR',
+    'bulgaria': 'BGR',
+    'burkina faso': 'BFA',
+    'burundi': 'BDI',
+    'bv': 'BVT',
+    'bvt': 'BVT',
+    'bw': 'BWA',
+    'bwa': 'BWA',
+    'by': 'BLR',
+    'bz': 'BLZ',
+    'ca': 'CAN',
+    'cabo verde': 'CPV',
+    'caf': 'CAF',
+    'cambodia': 'KHM',
+    'cameroon': 'CMR',
+    'can': 'CAN',
+    'canada': 'CAN',
+    'cayman islands': 'CYM',
+    'cc': 'CCK',
+    'cck': 'CCK',
+    'cd': 'COD',
+    'central african republic': 'CAF',
+    'cf': 'CAF',
+    'cg': 'COG',
+    'ch': 'CHE',
+    'chad': 'TCD',
+    'che': 'CHE',
+    'chile': 'CHL',
+    'china': 'CHN',
+    'chl': 'CHL',
+    'chn': 'CHN',
+    'christmas island': 'CXR',
+    'ci': 'CIV',
+    'civ': 'CIV',
+    'ck': 'COK',
+    'cl': 'CHL',
+    'cm': 'CMR',
+    'cmr': 'CMR',
+    'cn': 'CHN',
+    'co': 'COL',
+    'cocos (keeling) islands': 'CCK',
+    'cod': 'COD',
+    'cog': 'COG',
+    'cok': 'COK',
+    'col': 'COL',
+    'colombia': 'COL',
+    'com': 'COM',
+    'commonwealth of dominica': 'DMA',
+    'commonwealth of the bahamas': 'BHS',
+    'commonwealth of the northern mariana islands': 'MNP',
+    'comoros': 'COM',
+    'congo': 'COG',
+    'congo, the democratic republic of the': 'COD',
+    'cook islands': 'COK',
+    'cooki saared': 'COK',
+    'costa rica': 'CRI',
+    "cote d'ivoire": 'CIV',
+    'cpv': 'CPV',
+    'cr': 'CRI',
+    'cri': 'CRI',
+    'croatia': 'HRV',
+    'cu': 'CUB',
+    'cub': 'CUB',
+    'cuba': 'CUB',
+    'curacao': 'CUW',
+    'cuw': 'CUW',
+    'cv': 'CPV',
+    'cw': 'CUW',
+    'cx': 'CXR',
+    'cxr': 'CXR',
+    'cy': 'CYP',
+    'cym': 'CYM',
+    'cyp': 'CYP',
+    'cyprus': 'CYP',
+    'cz': 'CZE',
+    'cze': 'CZE',
+    'czech republic': 'CZE',
+    'czechia': 'CZE',
+    'de': 'DEU',
+    "democratic people's republic of korea": 'PRK',
+    'democratic republic of sao tome and principe': 'STP',
+    'democratic republic of timor-leste': 'TLS',
+    'democratic socialist republic of sri lanka': 'LKA',
+    'denmark': 'DNK',
+    'deu': 'DEU',
+    'dj': 'DJI',
+    'dji': 'DJI',
+    'djibouti': 'DJI',
+    'dk': 'DNK',
+    'dm': 'DMA',
+    'dma': 'DMA',
+    'dnk': 'DNK',
+    'do': 'DOM',
+    'dom': 'DOM',
+    'dominica': 'DMA',
+    'dominican republic': 'DOM',
+    'dominikaani vabariik': 'DOM',
+    'dz': 'DZA',
+    'dza': 'DZA',
+    'eastern republic of uruguay': 'URY',
+    'ec': 'ECU',
+    'ecu': 'ECU',
+    'ecuador': 'ECU',
+    'ee': 'EST',
+    'eesti': 'EST',
+    'eg': 'EGY',
+    'egiptus': 'EGY',
+    'egy': 'EGY',
+    'egypt': 'EGY',
+    'eh': 'ESH',
+    'ekvatoriaal-guinea': 'GNQ',
+    'el salvador': 'SLV',
+    'elevandiluurannik': 'CIV',
+    'equatorial guinea': 'GNQ',
+    'er': 'ERI',
+    'eri': 'ERI',
+    'eritrea': 'ERI',
+    'es': 'ESP',
+    'esh': 'ESH',
+    'esp': 'ESP',
+    'est': 'EST',
+    'estonia': 'EST',
+    'eswatini': 'SWZ',
+    'et': 'ETH',
+    'eth': 'ETH',
+    'ethiopia': 'ETH',
+    'etioopia': 'ETH',
+    'faari saared': 'FRO',
+    'falkland islands (malvinas)': 'FLK',
+    'falklandi saared': 'FLK',
+    'faroe islands': 'FRO',
+    'federal democratic republic of ethiopia': 'ETH',
+    'federal democratic republic of nepal': 'NPL',
+    'federal republic of germany': 'DEU',
+    'federal republic of nigeria': 'NGA',
+    'federal republic of somalia': 'SOM',
+    'federated states of micronesia': 'FSM',
+    'federative republic of brazil': 'BRA',
+    'fi': 'FIN',
+    'fidzi': 'FJI',
+    'fiji': 'FJI',
+    'filipiinid': 'PHL',
+    'fin': 'FIN',
+    'finland': 'FIN',
+    'fj': 'FJI',
+    'fji': 'FJI',
+    'fk': 'FLK',
+    'flk': 'FLK',
+    'fm': 'FSM',
+    'fo': 'FRO',
+    'fr': 'FRA',
+    'fra': 'FRA',
+    'france': 'FRA',
+    'french guiana': 'GUF',
+    'french polynesia': 'PYF',
+    'french republic': 'FRA',
+    'french southern territories': 'ATF',
+    'fro': 'FRO',
+    'fsm': 'FSM',
+    'ga': 'GAB',
+    'gab': 'GAB',
+    'gabon': 'GAB',
+    'gabonese republic': 'GAB',
+    'gambia': 'GMB',
+    'gb': 'GBR',
+    'gbr': 'GBR',
+    'gd': 'GRD',
+    'ge': 'GEO',
+    'geo': 'GEO',
+    'georgia': 'GEO',
+    'germany': 'DEU',
+    'gf': 'GUF',
+    'gg': 'GGY',
+    'ggy': 'GGY',
+    'gh': 'GHA',
+    'gha': 'GHA',
+    'ghana': 'GHA',
+    'gi': 'GIB',
+    'gib': 'GIB',
+    'gibraltar': 'GIB',
+    'gin': 'GIN',
+    'gl': 'GRL',
+    'glp': 'GLP',
+    'gm': 'GMB',
+    'gmb': 'GMB',
+    'gn': 'GIN',
+    'gnb': 'GNB',
+    'gnq': 'GNQ',
+    'gp': 'GLP',
+    'gq': 'GNQ',
+    'gr': 'GRC',
+    'grand duchy of luxembourg': 'LUX',
+    'grc': 'GRC',
+    'grd': 'GRD',
+    'greece': 'GRC',
+    'greenland': 'GRL',
+    'grenada': 'GRD',
+    'grl': 'GRL',
+    'groonimaa': 'GRL',
+    'gruusia': 'GEO',
+    'gs': 'SGS',
+    'gt': 'GTM',
+    'gtm': 'GTM',
+    'gu': 'GUM',
+    'guadeloupe': 'GLP',
+    'guam': 'GUM',
+    'guatemala': 'GTM',
+    'guernsey': 'GGY',
+    'guf': 'GUF',
+    'guinea': 'GIN',
+    'guinea-bissau': 'GNB',
+    'gum': 'GUM',
+    'guy': 'GUY',
+    'guyana': 'GUY',
+    'gw': 'GNB',
+    'gy': 'GUY',
+    'haiti': 'HTI',
+    'hashemite kingdom of jordan': 'JOR',
+    'heard island and mcdonald islands': 'HMD',
+    'heardi ja mcdonaldi saared': 'HMD',
+    'hellenic republic': 'GRC',
+    'hiina': 'CHN',
+    'hispaania': 'ESP',
+    'hk': 'HKG',
+    'hkg': 'HKG',
+    'hm': 'HMD',
+    'hmd': 'HMD',
+    'hn': 'HND',
+    'hnd': 'HND',
+    'holland': 'NLD',
+    'holy see (vatican city state)': 'VAT',
+    'honduras': 'HND',
+    'hong kong': 'HKG',
+    'hong kong special administrative region of china': 'HKG',
+    'hongkong': 'HKG',
+    'hongkongi erihalduspiirkond': 'HKG',
+    'horvaatia': 'HRV',
+    'hr': 'HRV',
+    'hrv': 'HRV',
+    'ht': 'HTI',
+    'hti': 'HTI',
+    'hu': 'HUN',
+    'hun': 'HUN',
+    'hungary': 'HUN',
+    'iceland': 'ISL',
+    'id': 'IDN',
+    'ida-timor': 'TLS',
+    'idn': 'IDN',
+    'ie': 'IRL',
+    'iirimaa': 'IRL',
+    'iisrael': 'ISR',
+    'il': 'ISR',
+    'im': 'IMN',
+    'imn': 'IMN',
+    'in': 'IND',
+    'ind': 'IND',
+    'independent state of papua new guinea': 'PNG',
+    'independent state of samoa': 'WSM',
+    'india': 'IND',
+    'indoneesia': 'IDN',
+    'indonesia': 'IDN',
+    'inglismaa': 'GBR',
+    'io': 'IOT',
+    'iot': 'IOT',
+    'iq': 'IRQ',
+    'ir': 'IRN',
+    'iraak': 'IRQ',
+    'iraan': 'IRN',
+    'iran, islamic republic of': 'IRN',
+    'iraq': 'IRQ',
+    'ireland': 'IRL',
+    'irl': 'IRL',
+    'irn': 'IRN',
+    'irq': 'IRQ',
+    'is': 'ISL',
+    'isl': 'ISL',
+    'islamic republic of afghanistan': 'AFG',
+    'islamic republic of iran': 'IRN',
+    'islamic republic of mauritania': 'MRT',
+    'islamic republic of pakistan': 'PAK',
+    'island': 'ISL',
+    'isle of man': 'IMN',
+    'isr': 'ISR',
+    'israel': 'ISR',
+    'it': 'ITA',
+    'ita': 'ITA',
+    'itaalia': 'ITA',
+    'italian republic': 'ITA',
+    'italy': 'ITA',
+    'jaapan': 'JPN',
+    'jam': 'JAM',
+    'jamaica': 'JAM',
+    'japan': 'JPN',
+    'je': 'JEY',
+    'jeemen': 'YEM',
+    'jersey': 'JEY',
+    'jey': 'JEY',
+    'jm': 'JAM',
+    'jo': 'JOR',
+    'jor': 'JOR',
+    'jordaania': 'JOR',
+    'jordan': 'JOR',
+    'joulusaar': 'CXR',
+    'jp': 'JPN',
+    'jpn': 'JPN',
+    'kaimanisaared': 'CYM',
+    'kambodza': 'KHM',
+    'kamerun': 'CMR',
+    'kanada': 'CAN',
+    'kariibi madalmaad': 'BES',
+    'kasahstan': 'KAZ',
+    'katar': 'QAT',
+    'kaz': 'KAZ',
+    'kazakhstan': 'KAZ',
+    'ke': 'KEN',
+    'keenia': 'KEN',
+    'ken': 'KEN',
+    'kenya': 'KEN',
+    'kesk-aafrika vabariik': 'CAF',
+    'kg': 'KGZ',
+    'kgz': 'KGZ',
+    'kh': 'KHM',
+    'khm': 'KHM',
+    'ki': 'KIR',
+    'kingdom of bahrain': 'BHR',
+    'kingdom of belgium': 'BEL',
+    'kingdom of bhutan': 'BTN',
+    'kingdom of cambodia': 'KHM',
+    'kingdom of denmark': 'DNK',
+    'kingdom of eswatini': 'SWZ',
+    'kingdom of lesotho': 'LSO',
+    'kingdom of morocco': 'MAR',
+    'kingdom of norway': 'NOR',
+    'kingdom of saudi arabia': 'SAU',
+    'kingdom of spain': 'ESP',
+    'kingdom of sweden': 'SWE',
+    'kingdom of thailand': 'THA',
+    'kingdom of the netherlands': 'NLD',
+    'kingdom of tonga': 'TON',
+    'kir': 'KIR',
+    'kiribati': 'KIR',
+    'km': 'COM',
+    'kn': 'KNA',
+    'kna': 'KNA',
+    'komoorid': 'COM',
+    'kongo dv': 'COD',
+    'kongo vabariik': 'COG',
+    'kookossaared': 'CCK',
+    'kor': 'KOR',
+    "korea, democratic people's republic of": 'PRK',
+    'korea, republic of': 'KOR',
+    'korgozstan': 'KGZ',
+    'kosovo': 'XKX',
+    'kp': 'PRK',
+    'kr': 'KOR',
+    'kreeka': 'GRC',
+    'kupros': 'CYP',
+    'kuuba': 'CUB',
+    'kuveit': 'KWT',
+    'kuwait': 'KWT',
+    'kw': 'KWT',
+    'kwt': 'KWT',
+    'ky': 'CYM',
+    'kyrgyz republic': 'KGZ',
+    'kyrgyzstan': 'KGZ',
+    'kz': 'KAZ',
+    'la': 'LAO',
+    'laane-sahara': 'ESH',
+    'lao': 'LAO',
+    "lao people's democratic republic": 'LAO',
+    'laos': 'LAO',
+    'lati': 'LVA',
+    'latvia': 'LVA',
+    'lb': 'LBN',
+    'lbn': 'LBN',
+    'lbr': 'LBR',
+    'lby': 'LBY',
+    'lc': 'LCA',
+    'lca': 'LCA',
+    'lebanese republic': 'LBN',
+    'lebanon': 'LBN',
+    'leedu': 'LTU',
+    'lesotho': 'LSO',
+    'li': 'LIE',
+    'libeeria': 'LBR',
+    'liberia': 'LBR',
+    'libya': 'LBY',
+    'lie': 'LIE',
+    'liechtenstein': 'LIE',
+    'liibanon': 'LBN',
+    'liibua': 'LBY',
+    'lithuania': 'LTU',
+    'lk': 'LKA',
+    'lka': 'LKA',
+    'louna-aafrika vabariik': 'ZAF',
+    'louna-georgia ja louna-sandwichi saared': 'SGS',
+    'louna-korea': 'KOR',
+    'louna-sudaan': 'SSD',
+    'lr': 'LBR',
+    'ls': 'LSO',
+    'lso': 'LSO',
+    'lt': 'LTU',
+    'ltu': 'LTU',
+    'lu': 'LUX',
+    'luksemburg': 'LUX',
+    'lux': 'LUX',
+    'luxembourg': 'LUX',
+    'lv': 'LVA',
+    'lva': 'LVA',
+    'ly': 'LBY',
+    'ma': 'MAR',
+    'mac': 'MAC',
+    'macao': 'MAC',
+    'macao special administrative region of china': 'MAC',
+    'macau erihalduspiirkond': 'MAC',
+    'madagascar': 'MDG',
+    'madagaskar': 'MDG',
+    'maf': 'MAF',
+    'malaisia': 'MYS',
+    'malawi': 'MWI',
+    'malaysia': 'MYS',
+    'maldiivid': 'MDV',
+    'maldives': 'MDV',
+    'mali': 'MLI',
+    'malta': 'MLT',
+    'mani saar': 'IMN',
+    'mar': 'MAR',
+    'maroko': 'MAR',
+    'marshall islands': 'MHL',
+    'marshalli saared': 'MHL',
+    'martinique': 'MTQ',
+    'mauritaania': 'MRT',
+    'mauritania': 'MRT',
+    'mauritius': 'MUS',
+    'mayotte': 'MYT',
+    'mc': 'MCO',
+    'mco': 'MCO',
+    'md': 'MDA',
+    'mda': 'MDA',
+    'mdg': 'MDG',
+    'mdv': 'MDV',
+    'me': 'MNE',
+    'mehhiko': 'MEX',
+    'mex': 'MEX',
+    'mexico': 'MEX',
+    'mf': 'MAF',
+    'mg': 'MDG',
+    'mh': 'MHL',
+    'mhl': 'MHL',
+    'micronesia, federated states of': 'FSM',
+    'mikroneesia': 'FSM',
+    'mk': 'MKD',
+    'mkd': 'MKD',
+    'ml': 'MLI',
+    'mli': 'MLI',
+    'mlt': 'MLT',
+    'mm': 'MMR',
+    'mmr': 'MMR',
+    'mn': 'MNG',
+    'mne': 'MNE',
+    'mng': 'MNG',
+    'mnp': 'MNP',
+    'mo': 'MAC',
+    'moldova': 'MDA',
+    'moldova, republic of': 'MDA',
+    'monaco': 'MCO',
+    'mongolia': 'MNG',
+    'mongoolia': 'MNG',
+    'montenegro': 'MNE',
+    'montserrat': 'MSR',
+    'morocco': 'MAR',
+    'mosambiik': 'MOZ',
+    'moz': 'MOZ',
+    'mozambique': 'MOZ',
+    'mp': 'MNP',
+    'mq': 'MTQ',
+    'mr': 'MRT',
+    'mrt': 'MRT',
+    'ms': 'MSR',
+    'msr': 'MSR',
+    'mt': 'MLT',
+    'mtq': 'MTQ',
+    'mu': 'MUS',
+    'mus': 'MUS',
+    'mv': 'MDV',
+    'mw': 'MWI',
+    'mwi': 'MWI',
+    'mx': 'MEX',
+    'my': 'MYS',
+    'myanmar': 'MMR',
+    'myanmar (birma)': 'MMR',
+    'mys': 'MYS',
+    'myt': 'MYT',
+    'mz': 'MOZ',
+    'na': 'NAM',
+    'nam': 'NAM',
+    'namibia': 'NAM',
+    'namiibia': 'NAM',
+    'nauru': 'NRU',
+    'nc': 'NCL',
+    'ncl': 'NCL',
+    'ne': 'NER',
+    'nepal': 'NPL',
+    'ner': 'NER',
+    'netherlands': 'NLD',
+    'new caledonia': 'NCL',
+    'new zealand': 'NZL',
+    'nf': 'NFK',
+    'nfk': 'NFK',
+    'ng': 'NGA',
+    'nga': 'NGA',
+    'ni': 'NIC',
+    'nic': 'NIC',
+    'nicaragua': 'NIC',
+    'nigeeria': 'NGA',
+    'niger': 'NER',
+    'nigeria': 'NGA',
+    'niu': 'NIU',
+    'niue': 'NIU',
+    'nl': 'NLD',
+    'nld': 'NLD',
+    'no': 'NOR',
+    'nor': 'NOR',
+    'norfolk': 'NFK',
+    'norfolk island': 'NFK',
+    'norra': 'NOR',
+    'north macedonia': 'MKD',
+    'northern mariana islands': 'MNP',
+    'norway': 'NOR',
+    'np': 'NPL',
+    'npl': 'NPL',
+    'nr': 'NRU',
+    'nru': 'NRU',
+    'nu': 'NIU',
+    'nz': 'NZL',
+    'nzl': 'NZL',
+    'om': 'OMN',
+    'omaan': 'OMN',
+    'oman': 'OMN',
+    'omn': 'OMN',
+    'pa': 'PAN',
+    'paapua uus-guinea': 'PNG',
+    'pak': 'PAK',
+    'pakistan': 'PAK',
+    'palau': 'PLW',
+    'palestiina': 'PSE',
+    'palestiina alad': 'PSE',
+    'palestine, state of': 'PSE',
+    'pan': 'PAN',
+    'panama': 'PAN',
+    'papua new guinea': 'PNG',
+    'paraguay': 'PRY',
+    'pcn': 'PCN',
+    'pe': 'PER',
+    "people's democratic republic of algeria": 'DZA',
+    "people's republic of bangladesh": 'BGD',
+    "people's republic of china": 'CHN',
+    'per': 'PER',
+    'peru': 'PER',
+    'peruu': 'PER',
+    'pf': 'PYF',
+    'pg': 'PNG',
+    'ph': 'PHL',
+    'philippines': 'PHL',
+    'phl': 'PHL',
+    'pitcairn': 'PCN',
+    'pitcairni saared': 'PCN',
+    'pk': 'PAK',
+    'pl': 'POL',
+    'plurinational state of bolivia': 'BOL',
+    'plw': 'PLW',
+    'pm': 'SPM',
+    'pn': 'PCN',
+    'png': 'PNG',
+    'pohja-korea': 'PRK',
+    'pohja-makedoonia': 'MKD',
+    'pohja-mariaanid': 'MNP',
+    'pol': 'POL',
+    'poland': 'POL',
+    'poola': 'POL',
+    'portugal': 'PRT',
+    'portuguese republic': 'PRT',
+    'pr': 'PRI',
+    'prantsuse guajaana': 'GUF',
+    'prantsuse lounaalad': 'ATF',
+    'prantsuse poluneesia': 'PYF',
+    'prantsusmaa': 'FRA',
+    'pri': 'PRI',
+    'principality of andorra': 'AND',
+    'principality of liechtenstein': 'LIE',
+    'principality of monaco': 'MCO',
+    'prk': 'PRK',
+    'prt': 'PRT',
+    'pry': 'PRY',
+    'ps': 'PSE',
+    'pse': 'PSE',
+    'pt': 'PRT',
+    'puerto rico': 'PRI',
+    'pw': 'PLW',
+    'py': 'PRY',
+    'pyf': 'PYF',
+    'qa': 'QAT',
+    'qat': 'QAT',
+    'qatar': 'QAT',
+    're': 'REU',
+    'republic of albania': 'ALB',
+    'republic of angola': 'AGO',
+    'republic of armenia': 'ARM',
+    'republic of austria': 'AUT',
+    'republic of azerbaijan': 'AZE',
+    'republic of belarus': 'BLR',
+    'republic of benin': 'BEN',
+    'republic of bosnia and herzegovina': 'BIH',
+    'republic of botswana': 'BWA',
+    'republic of bulgaria': 'BGR',
+    'republic of burundi': 'BDI',
+    'republic of cabo verde': 'CPV',
+    'republic of cameroon': 'CMR',
+    'republic of chad': 'TCD',
+    'republic of chile': 'CHL',
+    'republic of colombia': 'COL',
+    'republic of costa rica': 'CRI',
+    "republic of cote d'ivoire": 'CIV',
+    'republic of croatia': 'HRV',
+    'republic of cuba': 'CUB',
+    'republic of cyprus': 'CYP',
+    'republic of djibouti': 'DJI',
+    'republic of ecuador': 'ECU',
+    'republic of el salvador': 'SLV',
+    'republic of equatorial guinea': 'GNQ',
+    'republic of estonia': 'EST',
+    'republic of fiji': 'FJI',
+    'republic of finland': 'FIN',
+    'republic of ghana': 'GHA',
+    'republic of guatemala': 'GTM',
+    'republic of guinea': 'GIN',
+    'republic of guinea-bissau': 'GNB',
+    'republic of guyana': 'GUY',
+    'republic of haiti': 'HTI',
+    'republic of honduras': 'HND',
+    'republic of iceland': 'ISL',
+    'republic of india': 'IND',
+    'republic of indonesia': 'IDN',
+    'republic of iraq': 'IRQ',
+    'republic of kazakhstan': 'KAZ',
+    'republic of kenya': 'KEN',
+    'republic of kiribati': 'KIR',
+    'republic of latvia': 'LVA',
+    'republic of liberia': 'LBR',
+    'republic of lithuania': 'LTU',
+    'republic of madagascar': 'MDG',
+    'republic of malawi': 'MWI',
+    'republic of maldives': 'MDV',
+    'republic of mali': 'MLI',
+    'republic of malta': 'MLT',
+    'republic of mauritius': 'MUS',
+    'republic of moldova': 'MDA',
+    'republic of mozambique': 'MOZ',
+    'republic of myanmar': 'MMR',
+    'republic of namibia': 'NAM',
+    'republic of nauru': 'NRU',
+    'republic of nicaragua': 'NIC',
+    'republic of north macedonia': 'MKD',
+    'republic of palau': 'PLW',
+    'republic of panama': 'PAN',
+    'republic of paraguay': 'PRY',
+    'republic of peru': 'PER',
+    'republic of poland': 'POL',
+    'republic of san marino': 'SMR',
+    'republic of senegal': 'SEN',
+    'republic of serbia': 'SRB',
+    'republic of seychelles': 'SYC',
+    'republic of sierra leone': 'SLE',
+    'republic of singapore': 'SGP',
+    'republic of slovenia': 'SVN',
+    'republic of south africa': 'ZAF',
+    'republic of south sudan': 'SSD',
+    'republic of suriname': 'SUR',
+    'republic of tajikistan': 'TJK',
+    'republic of the congo': 'COG',
+    'republic of the gambia': 'GMB',
+    'republic of the marshall islands': 'MHL',
+    'republic of the niger': 'NER',
+    'republic of the philippines': 'PHL',
+    'republic of the sudan': 'SDN',
+    'republic of trinidad and tobago': 'TTO',
+    'republic of tunisia': 'TUN',
+    'republic of turkiye': 'TUR',
+    'republic of uganda': 'UGA',
+    'republic of uzbekistan': 'UZB',
+    'republic of vanuatu': 'VUT',
+    'republic of yemen': 'YEM',
+    'republic of zambia': 'ZMB',
+    'republic of zimbabwe': 'ZWE',
+    'reu': 'REU',
+    'reunion': 'REU',
+    'ro': 'ROU',
+    'roheneemesaared': 'CPV',
+    'romania': 'ROU',
+    'rootsi': 'SWE',
+    'rou': 'ROU',
+    'rs': 'SRB',
+    'ru': 'RUS',
+    'rumeenia': 'ROU',
+    'rus': 'RUS',
+    'russian federation': 'RUS',
+    'rw': 'RWA',
+    'rwa': 'RWA',
+    'rwanda': 'RWA',
+    'rwandese republic': 'RWA',
+    'sa': 'SAU',
+    'saalomoni saared': 'SLB',
+    'saint barthelemy': 'BLM',
+    'saint helena': 'SHN',
+    'saint helena, ascension and tristan da cunha': 'SHN',
+    'saint kitts and nevis': 'KNA',
+    'saint kitts ja nevis': 'KNA',
+    'saint lucia': 'LCA',
+    'saint martin (french part)': 'MAF',
+    'saint pierre and miquelon': 'SPM',
+    'saint vincent and the grenadines': 'VCT',
+    'saint vincent ja grenadiinid': 'VCT',
+    'saint-barthelemy': 'BLM',
+    'saint-martin': 'MAF',
+    'saint-pierre ja miquelon': 'SPM',
+    'saksamaa': 'DEU',
+    'sambia': 'ZMB',
+    'samoa': 'WSM',
+    'san marino': 'SMR',
+    'sao tome and principe': 'STP',
+    'sao tome ja principe': 'STP',
+    'sau': 'SAU',
+    'saudi araabia': 'SAU',
+    'saudi arabia': 'SAU',
+    'sb': 'SLB',
+    'sc': 'SYC',
+    'sd': 'SDN',
+    'sdn': 'SDN',
+    'se': 'SWE',
+    'seisellid': 'SYC',
+    'sen': 'SEN',
+    'senegal': 'SEN',
+    'serbia': 'SRB',
+    'seychelles': 'SYC',
+    'sg': 'SGP',
+    'sgp': 'SGP',
+    'sgs': 'SGS',
+    'sh': 'SHN',
+    'shn': 'SHN',
+    'si': 'SVN',
+    'sierra leone': 'SLE',
+    'singapore': 'SGP',
+    'singapur': 'SGP',
+    'sint maarten': 'SXM',
+    'sint maarten (dutch part)': 'SXM',
+    'sj': 'SJM',
+    'sjm': 'SJM',
+    'sk': 'SVK',
+    'sl': 'SLE',
+    'slb': 'SLB',
+    'sle': 'SLE',
+    'slovak republic': 'SVK',
+    'slovakia': 'SVK',
+    'slovakkia': 'SVK',
+    'sloveenia': 'SVN',
+    'slovenia': 'SVN',
+    'slv': 'SLV',
+    'sm': 'SMR',
+    'smr': 'SMR',
+    'sn': 'SEN',
+    'so': 'SOM',
+    'socialist republic of viet nam': 'VNM',
+    'solomon islands': 'SLB',
+    'som': 'SOM',
+    'somaalia': 'SOM',
+    'somalia': 'SOM',
+    'soome': 'FIN',
+    'south africa': 'ZAF',
+    'south georgia and the south sandwich islands': 'SGS',
+    'south sudan': 'SSD',
+    'spain': 'ESP',
+    'spm': 'SPM',
+    'sr': 'SUR',
+    'srb': 'SRB',
+    'sri lanka': 'LKA',
+    'ss': 'SSD',
+    'ssd': 'SSD',
+    'st': 'STP',
+    'state of israel': 'ISR',
+    'state of kuwait': 'KWT',
+    'state of qatar': 'QAT',
+    'stp': 'STP',
+    'sudaan': 'SDN',
+    'sudan': 'SDN',
+    'sultanate of oman': 'OMN',
+    'sur': 'SUR',
+    'suriname': 'SUR',
+    'suurbritannia': 'GBR',
+    'suuria': 'SYR',
+    'sv': 'SLV',
+    'svaasimaa': 'SWZ',
+    'svalbard and jan mayen': 'SJM',
+    'svalbard ja jan mayen': 'SJM',
+    'sveits': 'CHE',
+    'svk': 'SVK',
+    'svn': 'SVN',
+    'swe': 'SWE',
+    'sweden': 'SWE',
+    'swiss confederation': 'CHE',
+    'switzerland': 'CHE',
+    'swz': 'SWZ',
+    'sx': 'SXM',
+    'sxm': 'SXM',
+    'sy': 'SYR',
+    'syc': 'SYC',
+    'syr': 'SYR',
+    'syrian arab republic': 'SYR',
+    'sz': 'SWZ',
+    'taani': 'DNK',
+    'tadzikistan': 'TJK',
+    'tai': 'THA',
+    'taiwan': 'TWN',
+    'taiwan, province of china': 'TWN',
+    'tajikistan': 'TJK',
+    'tansaania': 'TZA',
+    'tanzania, united republic of': 'TZA',
+    'tc': 'TCA',
+    'tca': 'TCA',
+    'tcd': 'TCD',
+    'td': 'TCD',
+    'tf': 'ATF',
+    'tg': 'TGO',
+    'tgo': 'TGO',
+    'th': 'THA',
+    'tha': 'THA',
+    'thailand': 'THA',
+    'the state of eritrea': 'ERI',
+    'the state of palestine': 'PSE',
+    'timor-leste': 'TLS',
+    'tj': 'TJK',
+    'tjk': 'TJK',
+    'tk': 'TKL',
+    'tkl': 'TKL',
+    'tkm': 'TKM',
+    'tl': 'TLS',
+    'tls': 'TLS',
+    'tm': 'TKM',
+    'tn': 'TUN',
+    'to': 'TON',
+    'togo': 'TGO',
+    'togolese republic': 'TGO',
+    'tokelau': 'TKL',
+    'ton': 'TON',
+    'tonga': 'TON',
+    'tr': 'TUR',
+    'trinidad and tobago': 'TTO',
+    'trinidad ja tobago': 'TTO',
+    'tsaad': 'TCD',
+    'tsehhi': 'CZE',
+    'tsiili': 'CHL',
+    'tt': 'TTO',
+    'tto': 'TTO',
+    'tun': 'TUN',
+    'tuneesia': 'TUN',
+    'tunisia': 'TUN',
+    'tur': 'TUR',
+    'turgi': 'TUR',
+    'turkiye': 'TUR',
+    'turkmenistan': 'TKM',
+    'turks and caicos islands': 'TCA',
+    'turks ja caicos': 'TCA',
+    'tuv': 'TUV',
+    'tuvalu': 'TUV',
+    'tv': 'TUV',
+    'tw': 'TWN',
+    'twn': 'TWN',
+    'tz': 'TZA',
+    'tza': 'TZA',
+    'u.a.e.': 'ARE',
+    'ua': 'UKR',
+    'ug': 'UGA',
+    'uga': 'UGA',
+    'uganda': 'UGA',
+    'uhendkuningriik': 'GBR',
+    'uhendriigid': 'USA',
+    'uhendriikide hajasaared': 'UMI',
+    'ukr': 'UKR',
+    'ukraina': 'UKR',
+    'ukraine': 'UKR',
+    'um': 'UMI',
+    'umi': 'UMI',
+    'ungari': 'HUN',
+    'union of the comoros': 'COM',
+    'united arab emirates': 'ARE',
+    'united kingdom': 'GBR',
+    'united kingdom of great britain and northern ireland': 'GBR',
+    'united mexican states': 'MEX',
+    'united republic of tanzania': 'TZA',
+    'united states': 'USA',
+    'united states minor outlying islands': 'UMI',
+    'united states of america': 'USA',
+    'uruguay': 'URY',
+    'ury': 'URY',
+    'us': 'USA',
+    'usa': 'USA',
+    'usa neitsisaared': 'VIR',
+    'usbekistan': 'UZB',
+    'uus-kaledoonia': 'NCL',
+    'uus-meremaa': 'NZL',
+    'uy': 'URY',
+    'uz': 'UZB',
+    'uzb': 'UZB',
+    'uzbekistan': 'UZB',
+    'va': 'VAT',
+    'valgevene': 'BLR',
+    'vanuatu': 'VUT',
+    'vat': 'VAT',
+    'vatikan': 'VAT',
+    'vc': 'VCT',
+    'vct': 'VCT',
+    've': 'VEN',
+    'ven': 'VEN',
+    'vene foderatsioon': 'RUS',
+    'venemaa': 'RUS',
+    'venezuela': 'VEN',
+    'venezuela, bolivarian republic of': 'VEN',
+    'vg': 'VGB',
+    'vgb': 'VGB',
+    'vi': 'VIR',
+    'viet nam': 'VNM',
+    'vietnam': 'VNM',
+    'vir': 'VIR',
+    'virgin islands of the united states': 'VIR',
+    'virgin islands, british': 'VGB',
+    'virgin islands, u.s.': 'VIR',
+    'vn': 'VNM',
+    'vnm': 'VNM',
+    'vu': 'VUT',
+    'vut': 'VUT',
+    'wallis and futuna': 'WLF',
+    'wallis ja futuna': 'WLF',
+    'western sahara': 'ESH',
+    'wf': 'WLF',
+    'wlf': 'WLF',
+    'ws': 'WSM',
+    'wsm': 'WSM',
+    'ye': 'YEM',
+    'yem': 'YEM',
+    'yemen': 'YEM',
+    'yt': 'MYT',
+    'za': 'ZAF',
+    'zaf': 'ZAF',
+    'zambia': 'ZMB',
+    'zimbabwe': 'ZWE',
+    'zm': 'ZMB',
+    'zmb': 'ZMB',
+    'zw': 'ZWE',
+    'zwe': 'ZWE',
+}
+
+# PPA algandmetes kasutatakse sageli riikide ametlikke täisnimesid.
+# Võtame esmalt täpse vastenduse ning alles siis proovime üldnimetust.
+PPA_RIIGI_ALIASED = {
+    "eesti vabariik": "EST",
+    "vene fod eratsioon": "RUS",
+    "venemaa foderatsioon": "RUS",
+    "belgia kuningriik": "BEL",
+    "soome vabariik": "FIN",
+    "lati vabariik": "LVA",
+    "leedu vabariik": "LTU",
+    "poola vabariik": "POL",
+    "saksamaa liitvabariik": "DEU",
+    "prantsuse vabariik": "FRA",
+    "itaalia vabariik": "ITA",
+    "austria vabariik": "AUT",
+    "rootsi kuningriik": "SWE",
+    "norra kuningriik": "NOR",
+    "taani kuningriik": "DNK",
+    "hispaania kuningriik": "ESP",
+    "madalmaade kuningriik": "NLD",
+    "hollandi kuningriik": "NLD",
+    "uhendkuningriik": "GBR",
+    "hiina rahvavabariik": "CHN",
+    "india vabariik": "IND",
+    "korea vabariik": "KOR",
+    "korea rahvademokraatlik vabariik": "PRK",
+    "valgevene vabariik": "BLR",
+    "ukraina": "UKR",
+    "ameerika uhendriigid": "USA",
+    "kanada": "CAN",
+    "jaapani riik": "JPN",
+    "turgi vabariik": "TUR",
+    "tsehhi vabariik": "CZE",
+    "slovaki vabariik": "SVK",
+    "ungari": "HUN",
+    "portugali vabariik": "PRT",
+    "kreeka vabariik": "GRC",
+    "iiri vabariik": "IRL",
+    "sveitsi konfoederatsioon": "CHE",
+    "luksemburgi suurhertsogiriik": "LUX",
+    "rumeenia": "ROU",
+    "bulgaaria vabariik": "BGR",
+    "moldova vabariik": "MDA",
+    "kasahstani vabariik": "KAZ",
+    "usbekistani vabariik": "UZB",
+    "aserbaidzaani vabariik": "AZE",
+    "armeenia vabariik": "ARM",
+    "gruusia": "GEO",
+    "iisl endi vabariik": "ISL",
+}
+
+def normaliseeri_riik(vaartus):
+    return " ".join("".join(
+        c for c in unicodedata.normalize("NFKD", str(vaartus).casefold())
+        if not unicodedata.combining(c)
+    ).split())
+
+
+# PPA ametlike kodakondsusnimetuste täiendavad vastendused
+
+PPA_TAIENDAVAD_RIIGID = {
+    "Suurbritannia ja Põhja-Iiri Ühendkuningriik": "GBR",
+    "Iisraeli Riik": "ISR",
+    "Madalmaade Kuningriik ~ Hollandi Kuningriik": "NLD",
+    "Küprose Vabariik": "CYP",
+    "Kõrgõstan (Kirgiisi Vabariik)": "KGZ",
+    "Šveitsi Konföderatsioon": "CHE",
+    "Filipiini Vabariik": "PHL",
+    "Mehhiko Ühendriigid": "MEX",
+    "Pakistani Islamivabariik": "PAK",
+    "Iraani Islamivabariik": "IRN",
+    "Tadžikistani Vabariik": "TJK",
+    "Egiptuse Araabia Vabariik": "EGY",
+    "Singapuri Vabariik": "SGP",
+    "Bangladeshi Rahvavabariik": "BGD",
+    "Iraagi Vabariik": "IRQ",
+    "Jordaania Haɩmiidi Kuningriik": "JOR",
+    "Sri Lanka Demokraatlik Sotsialistlik Vabariik": "LKA",
+    "Saint Kitts ja Nevise Föderatsioon": "KNA",
+    "Vietnami Sotsialistlik Vabariik": "VNM",
+    "Liibanoni Vabariik": "LBN",
+    "Süüria Araabia Vabariik": "SYR",
+    "Myanmari Liidu Vabariik": "MMR",
+    "Islandi Vabariik": "ISL",
+    "Nepali Demokraatlik Liitvabariik": "NPL",
+    "Kameruni Vabariik": "CMR",
+    "Afganistani Islamivabariik": "AFG",
+    "Venezuela Bolivari Vabariik": "VEN",
+    "Uruguay Idavabariik": "URY",
+    "Kuveidi Riik": "KWT",
+    "Omaani Sultaniriik": "OMN",
+}
+
+PPA_RIIGI_ALIASED.update({
+    normaliseeri_riik(nimi): iso3
+    for nimi, iso3 in PPA_TAIENDAVAD_RIIGID.items()
+})
+
+
+PPA_UUED_RIIGID = {
+    "Alžeeria Demokraatlik Rahvavabariik": "DZA",
+    "Ecuadori Vabariik": "ECU",
+    "El Salvadori Vabariik": "SLV",
+    "Mauritiuse Vabariik": "MUS",
+    "Dominica Ühendus": "DMA",
+    "Hondurase Vabariik": "HND",
+    "Bahreini Kuningriik": "BHR",
+    "Jeemeni Vabariik": "YEM",
+    "Tansaania Ühendvabariik": "TZA",
+    "Boliivia Paljurahvuseline Riik": "BOL",
+    "Sudaani Vabariik": "SDN",
+    "Trinidadi ja Tobago Vabariik": "TTO",
+    "Etioopia Demokraatlik Liitvabariik": "ETH",
+    "Andorra Vürstiriik": "AND",
+    "Senegali Vabariik": "SEN",
+    "Cote d'Ivoire'i Vabariik": "CIV",
+    "Mosambiigi Vabariik": "MOZ",
+    "Kongo Demokraatlik Vabariik": "COD",
+    "Katari Riik": "QAT",
+    "Liibüa Riik": "LBY",
+    "Benini Vabariik": "BEN",
+    "Suur Liibüa Araabia Sotsialistlik Rahvad١mahirija": "LBY",
+    "Bhutani Kuningriik": "BTN",
+    "Brunei Darussalami Riik": "BRN",
+    "Seišelli Vabariik": "SYC",
+    "Maldiivi Vabariik": "MDV",
+    "Madagaskari Vabariik": "MDG",
+    "Liechtensteini Vürstiriik": "LIE",
+    "Laose Demokraatlik Rahvavabariik": "LAO",
+    "Monaco Vürstiriik": "MCO",
+    "Mauritaania Islamivabariik": "MRT",
+    "Gaboni Vabariik": "GAB",
+    "Eritrea Riik": "ERI",
+    "Bahama Ühendus": "BHS",
+    "Nigeri Vabariik": "NER",
+}
+
+PPA_RIIGI_ALIASED.update({
+    normaliseeri_riik(nimi): iso3
+    for nimi, iso3 in PPA_UUED_RIIGID.items()
+})
+
+
+PPA_ERIJUHUD = {
+    "Taiwan, Hiina provints (CHN)": "TWN",
+    "Hongkong (Hiina RV)": "HKG",
+    "Palestiina okupeeritud ala": "PSE",
+    "British Nationals (Overseas)": "GBR",
+    "British subjects": "GBR",
+    "British Protected Persons": "GBR",
+}
+
+PPA_RIIGI_ALIASED.update({
+    normaliseeri_riik(nimi): iso3
+    for nimi, iso3 in PPA_ERIJUHUD.items()
+})
+
+def leia_iso3(kodakondsus):
+    nimi = normaliseeri_riik(kodakondsus)
+    vaste = PPA_RIIGI_ALIASED.get(nimi) or KODAKONDSUS_ISO3.get(nimi)
+    if vaste:
+        return vaste
+    # Ainult kindlate üldiste riigivormide korral eemaldame lõpus tiitli.
+    # Erandid, nagu Korea Vabariik, on ülal eraldi määratud.
+    for lopp in (" vabariik", " kuningriik", " liitvabariik",
+                 " suurhertsogiriik", " foderatsioon"):
+        if nimi.endswith(lopp):
+            alus = nimi[:-len(lopp)]
+            if alus in {"korea", "kong o", "kongo", "dominikaani", "kesk aafrika"}:
+                return None
+            return KODAKONDSUS_ISO3.get(alus)
+    return None
+
+st.divider()
+st.subheader("🌍 Kodakondsuste maailmakaart")
+
+kaardi_suund = st.segmented_control(
+    "Liikumissuund",
+    options=["Sisenemised", "Väljumised"],
+    default="Sisenemised",
+    key="sv_kaardi_suund",
+)
+
+kaardi_ulatus = st.segmented_control(
+    "Kuvatavad riigid",
+    options=["TOP 20", "Kõik kaardistatavad"],
+    default="TOP 20",
+    key="sv_kaardi_ulatus",
+)
+
+kaardi_andmed = filtreeritud.loc[
+    filtreeritud["Suund"] == kaardi_suund
+]
+
+kodakondsuste_summa = (
+    kaardi_andmed.groupby("Kodakondsus", dropna=False)["Piiriületuste arv"]
+    .sum().sort_values(ascending=False)
+)
+
+# Nimetaja on kogu valitud suuna piiriületuste arv, mitte TOP20 summa.
+kaardi_kokku = float(kaardi_andmed["Piiriületuste arv"].sum())
+kaardi_tabel = kodakondsuste_summa.reset_index()
+kaardi_tabel["ISO3"] = kaardi_tabel["Kodakondsus"].map(
+    leia_iso3
+)
+
+# Ühte ISO-riiki koonduvad võimalikud eri nimekujud.
+kaardi_riigid = (
+    kaardi_tabel.dropna(subset=["ISO3"])
+    .groupby("ISO3", as_index=False)
+    .agg({"Piiriületuste arv": "sum", "Kodakondsus": "first"})
+    .sort_values("Piiriületuste arv", ascending=False)
+)
+if kaardi_ulatus == "TOP 20":
+    kaardi_riigid = kaardi_riigid.head(20).copy()
+
+if kaardi_kokku == 0 or kaardi_riigid.empty:
+    st.info("Valitud filtritega kaardile kantavaid kodakondsusi ei ole.")
+else:
+    kaardi_riigid["Osakaal"] = (
+        100 * kaardi_riigid["Piiriületuste arv"] / kaardi_kokku
+    )
+    kaardi_riigid["Arvutekst"] = kaardi_riigid["Piiriületuste arv"].map(
+        lambda x: f"{int(x):,}".replace(",", " ")
+    )
+    varviskaala = (
+        [[0.0, "#e6f4e8"], [0.35, "#8bd1a1"], [1.0, "#08753b"]]
+        if kaardi_suund == "Sisenemised" else
+        [[0.0, "#e4f1fb"], [0.35, "#91c8ec"], [1.0, "#125e9c"]]
+    )
+    joonis_kaart = go.Figure(go.Choropleth(
+        locations=kaardi_riigid["ISO3"],
+        z=kaardi_riigid["Osakaal"],
+        locationmode="ISO-3",
+        text=kaardi_riigid["Kodakondsus"],
+        customdata=kaardi_riigid[["Arvutekst", "Osakaal"]].to_numpy(),
+        hovertemplate=(
+            "<b>%{text}</b><br>Piiriületusi: %{customdata[0]}"
+            "<br>Osakaal valitud suunast: %{customdata[1]:.2f}%<extra></extra>"
+        ),
+        colorscale=varviskaala,
+        zmin=0,
+        marker_line_color="white",
+        marker_line_width=0.3,
+        colorbar=dict(title="Osakaal %", thickness=13, len=0.6),
+    ))
+    joonis_kaart.update_geos(
+        projection_type="natural earth",
+        showframe=False,
+        showcoastlines=True,
+        coastlinecolor="#bfc9d3",
+        showland=True,
+        landcolor="#e9edf1",
+        showcountries=True,
+        countrycolor="#ffffff",
+        bgcolor="rgba(0,0,0,0)",
+    )
+    joonis_kaart.update_layout(
+        margin=dict(l=5, r=5, t=10, b=5),
+        height=540,
+        paper_bgcolor="rgba(0,0,0,0)",
+        geo=dict(bgcolor="rgba(0,0,0,0)"),
+    )
+    st.plotly_chart(joonis_kaart, width="stretch")
+
+    kaardistamata = kaardi_tabel.loc[
+        kaardi_tabel["ISO3"].isna(), "Piiriületuste arv"
+    ].sum()
+    st.caption(
+        f"Kaardil kuvatakse {kaardi_ulatus.lower()} riigid. "
+        f"Osakaalu nimetaja on kõik {kaardi_suund.lower()} valitud filtritega. "
+        f"Kaardistamata kodakondsuste piiriületusi: "
+        f"{int(kaardistamata):,}. ".replace(",", " ")
+        + "Kodakondsus ei tähenda tingimata päritolu- ega elukohariiki. "
+        + ("Hallid riigid ei kuulu kuvatava TOP 20 hulka." if kaardi_ulatus == "TOP 20" else "Hallid riigid on kaardistamata või ilma valitud andmeteta.")
+    )
+    if kaardistamata:
+        with st.expander("Kodakondsused, mida ei õnnestunud kaardile paigutada"):
+            puuduvad = kaardi_tabel.loc[kaardi_tabel["ISO3"].isna(),
+                ["Kodakondsus", "Piiriületuste arv"]].sort_values(
+                "Piiriületuste arv", ascending=False)
+            st.dataframe(puuduvad, hide_index=True, width="stretch")
+            st.caption("Esimesed read näitavad kõige suurema mõjuga puuduvaid vastendusi; nende põhjal saab sõnastikku täiendada.")
+
+# ------------------------------------------
+# C. SISENEMISTE JA VÄLJUMISTE DÜNAAMIKA
 # ------------------------------------------
 
 st.divider()
 st.subheader("Sisenemiste ja väljumiste dünaamika")
 
 kuupohine = (
-    filtreeritud
-    .groupby(["Kuupäev", "Suund"])["Piiriületuste arv"]
-    .sum()
-    .unstack("Suund", fill_value=0)
-    .sort_index()
+    filtreeritud.groupby(["Kuupäev", "Suund"])["Piiriületuste arv"]
+    .sum().unstack("Suund", fill_value=0).sort_index()
 )
-
-for suund in ["Sisenemised", "Väljumised"]:
+for suund in ("Sisenemised", "Väljumised"):
     if suund not in kuupohine.columns:
         kuupohine[suund] = 0
 
 fig_kuud = go.Figure()
-
-for suund, varv in [
-    ("Sisenemised", "#178939"),
-    ("Väljumised", "#2878B5"),
-]:
-    fig_kuud.add_trace(
-        go.Scatter(
-            x=kuupohine.index,
-            y=kuupohine[suund],
-            mode="lines",
-            name=suund,
-            line=dict(color=varv, width=2.5)
-        )
-    )
-
+for suund, varvus in [("Sisenemised", "#178939"),
+                     ("Väljumised", "#2878B5")]:
+    fig_kuud.add_trace(go.Scatter(
+        x=kuupohine.index, y=kuupohine[suund],
+        mode="lines", name=suund,
+        line=dict(color=varvus, width=2.5),
+    ))
 fig_kuud.update_layout(
-    xaxis_title="Aeg",
-    yaxis_title="Piiriületuste arv",
-    hovermode="x unified",
-    template="plotly_white",
-    height=470
+    xaxis_title="Aeg", yaxis_title="Piiriületuste arv",
+    hovermode="x unified", template="plotly_white", height=470,
 )
-
 st.plotly_chart(fig_kuud, width="stretch")
 
-
 # ------------------------------------------
-# HOOAJALISUSE INDEKS
-# SISENEMISED VS VÄLJUMISED
+# D. KUU / KVARTAL / NÄDALAPÄEV
 # ------------------------------------------
 
-st.subheader("Hooajalisus kuude lõikes")
+st.divider()
+st.subheader("📅 Hooajalisus ja perioodide võrdlus")
 
-st.caption(
-    "Indeks 100 tähistab vastava aasta keskmist kuutaset. "
-    "Näiteks 120 tähendab 20% kõrgemat ning 80 "
-    "20% madalamat piiriületuste arvu."
+ajavaade = st.segmented_control(
+    "Ajatase", ["Kuu", "Kvartal", "Nädalapäev"],
+    default="Kuu", key="sv_ajavaade"
 )
 
-# Kasutame samu filtreid, mis ülejäänud lehel.
-# Hooajalisuse arvutamiseks vajame täisaastaid.
-# Kui kuu filter on piiratud, arvutame indeksi
-# ikkagi kõigi 12 kuu põhjal.
-
+# Kuu filter jäetakse hooajalisuse võrdlusest välja.
+# Ülejäänud aktiivsed filtrid kehtivad; 2026 on osaline.
 hooaja_alus = andmed.loc[
     andmed["aasta"].isin(aastad)
     & andmed["Piiripunkti tüüp"].isin(piirityybid)
 ].copy()
-
 for veerg, valitud in valikulised_filtrid.items():
     if valitud:
-        hooaja_alus = hooaja_alus.loc[
-            hooaja_alus[veerg].isin(valitud)
-        ]
+        hooaja_alus = hooaja_alus.loc[hooaja_alus[veerg].isin(valitud)]
 
-# Ainult kalendaarselt täielikud aastad.
-# 2026 on ajaloolistes andmetes osaline.
+tais_aastad = sorted(
+    aasta for aasta in aastad
+    if saadaolevad_kuud.get(aasta, set()) == set(range(1, 13))
+)
 
-tais_aastad = [
-    aasta for aasta in sorted(aastad)
-    if len(saadaolevad_kuud.get(aasta, set())) == 12
-]
+if not tais_aastad:
+    st.info("Vali vähemalt üks täielik kalendriaasta hooajalisuse jaoks.")
+elif ajavaade == "Nädalapäev":
+    sis_paev, val_paev = lae_paevased_andmed()
 
-hooaja_alus = hooaja_alus.loc[
-    hooaja_alus["aasta"].isin(tais_aastad)
-]
+    # Kuu filter jääb välja nagu teistes hooajalisuse vaadetes.
+    # Nullpäevad sisalduvad nimetajas kalendri alusel.
+    suundade_paevad = []
+    for suund, alus, arv_veerg in [
+        ("Sisenemised", sis_paev, "Piiriületajate arv"),
+        ("Väljumised", val_paev, "Piirilt lahkujate arv"),
+    ]:
+        paeva_mask = (
+            alus["aasta"].isin(tais_aastad)
+            & alus["Piiripunkti tüüp"].isin(piirityybid)
+        )
+        for veerg, valitud in valikulised_filtrid.items():
+            if valitud:
+                paeva_mask &= alus[veerg].isin(valitud)
 
-if hooaja_alus.empty:
-    st.info(
-        "Hooajalisuse arvutamiseks vali vähemalt "
-        "üks täielik kalendriaasta."
+        koond = (
+            alus.loc[paeva_mask]
+            .groupby(["aasta", "nadalapaev"], observed=True)[arv_veerg]
+            .sum()
+        )
+        koond = koond.reindex(
+            pd.MultiIndex.from_product(
+                [tais_aastad, range(1, 8)],
+                names=["aasta", "nadalapaev"],
+            ),
+            fill_value=0,
+        ).rename("Arv").reset_index()
+        koond["Suund"] = suund
+        suundade_paevad.append(koond)
+
+    paevade_koond = pd.concat(suundade_paevad, ignore_index=True)
+
+    # Arvutame iga täisaasta 365/366 kalendripäeva ja nädalapäevade arvu.
+    kalendri_ridu = []
+    for aasta in tais_aastad:
+        kalender = pd.date_range(f"{aasta}-01-01", f"{aasta}-12-31", freq="D")
+        loendus = (
+            pd.Series(kalender.dayofweek + 1)
+            .value_counts().reindex(range(1, 8), fill_value=0)
+        )
+        for paev in range(1, 8):
+            kalendri_ridu.append((aasta, paev, int(loendus[paev]), len(kalender)))
+    kalender_df = pd.DataFrame(
+        kalendri_ridu,
+        columns=["aasta", "nadalapaev", "Paevi", "Aastas_paevi"],
+    )
+    paevade_koond = paevade_koond.merge(
+        kalender_df, on=["aasta", "nadalapaev"], validate="many_to_one"
+    )
+    paevade_koond["Paeva_keskmine"] = (
+        paevade_koond["Arv"] / paevade_koond["Paevi"]
+    )
+    aasta_maht = paevade_koond.groupby(["Suund", "aasta"])["Arv"].transform("sum")
+    aasta_paevakeskmine = aasta_maht / paevade_koond["Aastas_paevi"]
+    paevade_koond["Indeks"] = (
+        paevade_koond["Paeva_keskmine"]
+        / aasta_paevakeskmine.where(aasta_paevakeskmine > 0) * 100
     )
 
+    # Keskmine absoluutarv põhineb kõigi valitud aastate vastavate
+    # nädalapäevade kogusummal / nende kalendripäevade arvul.
+    graafiku_data = (
+        paevade_koond.groupby(["Suund", "nadalapaev"], as_index=False)
+        .agg(Indeks=("Indeks", "mean"),
+             Kogusumma=("Arv", "sum"), Kalendripaevad=("Paevi", "sum"))
+    )
+    graafiku_data["Keskmine_arv"] = (
+        graafiku_data["Kogusumma"] / graafiku_data["Kalendripaevad"]
+    )
+
+    def nadalapaeva_moodikud(suund):
+        x = graafiku_data.loc[
+            graafiku_data["Suund"] == suund, "Keskmine_arv"
+        ]
+        keskmine = float(x.mean()) if not x.empty else None
+        peak = float(x.max() / keskmine) if keskmine and keskmine > 0 else None
+        return keskmine, peak
+
+    sis_avg, sis_peak = nadalapaeva_moodikud("Sisenemised")
+    val_avg, val_peak = nadalapaeva_moodikud("Väljumised")
+    c1, c2, c3 = st.columns([1, 1, 1.15])
+    with c1:
+        st.metric("Keskmine sisenemine päevas",
+                  vorminda_arv(round(sis_avg)) if sis_avg is not None else "–")
+    with c2:
+        st.metric("Keskmine väljumine päevas",
+                  vorminda_arv(round(val_avg)) if val_avg is not None else "–")
+    with c3:
+        st.markdown("**Peak / Avg ratio**")
+        st.markdown(
+            f"<span style='color:#178939'>S: <b>{sis_peak:.2f}×</b></span>"
+            if sis_peak is not None else "S: –",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"<span style='color:#2878B5'>V: <b>{val_peak:.2f}×</b></span>"
+            if val_peak is not None else "V: –",
+            unsafe_allow_html=True,
+        )
+
+    paevanimed = ["Esmaspäev", "Teisipäev", "Kolmapäev", "Neljapäev",
+                  "Reede", "Laupäev", "Pühapäev"]
+    fig_hooaeg = go.Figure()
+    for suund, varvus in [("Sisenemised", "#178939"),
+                          ("Väljumised", "#2878B5")]:
+        d = graafiku_data.loc[
+            graafiku_data["Suund"] == suund
+        ].set_index("nadalapaev").reindex(range(1, 8))
+        fig_hooaeg.add_trace(go.Scatter(
+            x=paevanimed, y=d["Indeks"],
+            customdata=d["Keskmine_arv"].to_numpy().reshape(-1, 1),
+            name=suund, mode="lines+markers",
+            line=dict(color=varvus, width=3), marker=dict(size=8),
+            hovertemplate=(
+                "%{x}<br>Hooajalisuse indeks: %{y:.1f}"
+                "<br>Keskmine päevas: %{customdata[0]:,.0f}"
+                "<extra>%{fullData.name}</extra>"
+            ),
+        ))
+    fig_hooaeg.add_hline(
+        y=100, line_dash="dash", line_color="gray",
+        annotation_text="Aasta keskmine päevatase = 100"
+    )
+    fig_hooaeg.update_layout(
+        xaxis_title="Nädalapäev", yaxis_title="Hooajalisuse indeks",
+        template="plotly_white", hovermode="x unified", height=430,
+        legend=dict(orientation="h", y=1.12), margin=dict(t=65),
+    )
+    st.plotly_chart(fig_hooaeg, width="stretch")
+    st.caption(
+        f"Nädalapäevade võrdlus põhineb täisaastatel "
+        f"{min(tais_aastad)}–{max(tais_aastad)}. "
+        "Indeks on igal aastal normaliseeritud selle aasta keskmise "
+        "päevase piiriületuste arvu suhtes. Nulliga kalendripäevad "
+        "on arvestatud. Kuu filter seda plokki ei mõjuta."
+    )
 else:
-    # Kuude kogusummad suuna ja aasta lõikes
+    hooaja_alus = hooaja_alus.loc[hooaja_alus["aasta"].isin(tais_aastad)]
     hooaja_kuud = (
-        hooaja_alus
-        .groupby(
-            ["Suund", "aasta", "kuu"],
-            as_index=False
-        )["Piiriületuste arv"]
+        hooaja_alus.groupby(["Suund", "aasta", "kuu"])["Piiriületuste arv"]
         .sum()
     )
-
-    # Iga suuna ja aasta keskmine kuutase
-    aasta_keskmine = (
-        hooaja_kuud
-        .groupby(["Suund", "aasta"])["Piiriületuste arv"]
-        .transform("mean")
+    # Täielikud aastasisesed kalendrikuu read, sh nullkuud.
+    hooaja_indeksirida = pd.MultiIndex.from_product(
+        [["Sisenemised", "Väljumised"], tais_aastad, range(1, 13)],
+        names=["Suund", "aasta", "kuu"]
+    )
+    hooaja_kuud = (
+        hooaja_kuud.reindex(hooaja_indeksirida, fill_value=0)
+        .rename("Arv").reset_index()
     )
 
-    # Hooajalisuse indeks aasta sees
-    hooaja_kuud["Indeks"] = (
-        hooaja_kuud["Piiriületuste arv"]
-        / aasta_keskmine.where(aasta_keskmine > 0)
-        * 100
+    if ajavaade == "Kuu":
+        hooaeg = hooaja_kuud.rename(columns={"kuu": "Periood"}).copy()
+        vaartused = list(range(1, 13))
+        sildid = [kuude_nimed[k] for k in vaartused]
+        perioodi_nimi = "kuus"
+    else:
+        hooaja_kuud["Periood"] = ((hooaja_kuud["kuu"] - 1) // 3 + 1)
+        hooaeg = (
+            hooaja_kuud.groupby(["Suund", "aasta", "Periood"], as_index=False)["Arv"]
+            .sum()
+        )
+        vaartused = [1, 2, 3, 4]
+        sildid = ["Q1", "Q2", "Q3", "Q4"]
+        perioodi_nimi = "kvartalis"
+
+    # Indeks põhineb iga aasta oma keskmisel perioodimahul.
+    aasta_keskmine = hooaeg.groupby(["Suund", "aasta"])["Arv"].transform("mean")
+    hooaeg["Indeks"] = (
+        hooaeg["Arv"] / aasta_keskmine.where(aasta_keskmine > 0) * 100
     )
 
-    # Sama kalendrikuu indeksite keskmine aastate lõikes
-    hooaja_indeks = (
-        hooaja_kuud
-        .groupby(["Suund", "kuu"])["Indeks"]
-        .mean()
-        .reset_index()
+    graafiku_data = (
+        hooaeg.groupby(["Suund", "Periood"], as_index=False)
+        .agg(Indeks=("Indeks", "mean"), Keskmine_arv=("Arv", "mean"))
     )
+
+    # Need mõõdikud põhinevad ABSOLUUTARVUDEL, mitte indeksil.
+    def perioodi_moodikud(suund):
+        x = graafiku_data.loc[
+            graafiku_data["Suund"] == suund, "Keskmine_arv"
+        ].dropna()
+        keskmine = float(x.mean()) if not x.empty else None
+        peak = (float(x.max()) / keskmine) if keskmine and keskmine > 0 else None
+        return keskmine, peak
+
+    sis_avg, sis_peak = perioodi_moodikud("Sisenemised")
+    val_avg, val_peak = perioodi_moodikud("Väljumised")
+
+    c1, c2, c3 = st.columns([1, 1, 1.15])
+    with c1:
+        st.metric(
+            f"Keskmine sisenemine {perioodi_nimi}",
+            vorminda_arv(round(sis_avg)) if sis_avg is not None else "–"
+        )
+    with c2:
+        st.metric(
+            f"Keskmine väljumine {perioodi_nimi}",
+            vorminda_arv(round(val_avg)) if val_avg is not None else "–"
+        )
+    with c3:
+        st.markdown("**Peak / Avg ratio**")
+        st.markdown(
+            f"<span style='color:#178939'>S: <b>{sis_peak:.2f}×</b></span>"
+            if sis_peak is not None else "S: –",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"<span style='color:#2878B5'>V: <b>{val_peak:.2f}×</b></span>"
+            if val_peak is not None else "V: –",
+            unsafe_allow_html=True,
+        )
 
     fig_hooaeg = go.Figure()
-
-    for suund, varv in [
-        ("Sisenemised", "#178939"),
-        ("Väljumised", "#2878B5")
-    ]:
-        suuna_andmed = hooaja_indeks.loc[
-            hooaja_indeks["Suund"] == suund
-        ].sort_values("kuu")
-
-        fig_hooaeg.add_trace(
-            go.Scatter(
-                x=[
-                    kuude_nimed[k]
-                    for k in suuna_andmed["kuu"]
-                ],
-                y=suuna_andmed["Indeks"],
-                mode="lines+markers",
-                name=suund,
-                line=dict(color=varv, width=3),
-                marker=dict(size=7),
-                hovertemplate=(
-                    "%{x}<br>"
-                    "Hooajalisuse indeks: %{y:.1f}"
-                    "<extra>%{fullData.name}</extra>"
-                )
-            )
-        )
-
+    for suund, varvus in [("Sisenemised", "#178939"),
+                         ("Väljumised", "#2878B5")]:
+        d = graafiku_data.loc[
+            graafiku_data["Suund"] == suund
+        ].set_index("Periood").reindex(vaartused)
+        fig_hooaeg.add_trace(go.Scatter(
+            x=sildid, y=d["Indeks"],
+            customdata=d["Keskmine_arv"].to_numpy().reshape(-1, 1),
+            name=suund, mode="lines+markers",
+            line=dict(color=varvus, width=3), marker=dict(size=8),
+            hovertemplate=(
+                "%{x}<br>Hooajalisuse indeks: %{y:.1f}"
+                "<br>Keskmine perioodimaht: %{customdata[0]:,.0f}"
+                "<extra>%{fullData.name}</extra>"
+            ),
+        ))
     fig_hooaeg.add_hline(
-        y=100,
-        line_dash="dash",
-        line_color="gray",
+        y=100, line_dash="dash", line_color="gray",
         annotation_text="Aasta keskmine = 100"
     )
-
     fig_hooaeg.update_layout(
-        xaxis_title="Kuu",
+        xaxis_title="Kuu" if ajavaade == "Kuu" else "Kvartal",
         yaxis_title="Hooajalisuse indeks",
-        template="plotly_white",
-        hovermode="x unified",
-        height=430,
-        legend=dict(orientation="h", y=1.12)
+        template="plotly_white", hovermode="x unified", height=430,
+        legend=dict(orientation="h", y=1.12),
+        margin=dict(t=65),
     )
-
-    st.plotly_chart(
-        fig_hooaeg,
-        width="stretch"
-    )
-
+    st.plotly_chart(fig_hooaeg, width="stretch")
     st.caption(
-        "Hooajalisuse indeks on arvutatud "
-        f"{min(tais_aastad)}–{max(tais_aastad)} "
-        "täisaastate põhjal. Iga aasta on esmalt "
-        "normaliseeritud oma keskmise kuutasemega. "
-        "Kuu filter seda graafikut ei mõjuta."
+        f"Võrdlus põhineb täisaastatel {min(tais_aastad)}–{max(tais_aastad)}. "
+        "Kõik perioodid on iga aasta sees normaliseeritud; "
+        "keskmised mahud ja Peak/Avg põhinevad tegelikel piiriületuste arvudel. "
+        "Kuu filter seda plokki ei mõjuta."
     )
-
 
 # ------------------------------------------
-# AASTATE VÕRDLUS
+# E. SISENEMISTE JA VÄLJUMISTE KUINE ERINEVUS
 # ------------------------------------------
 
 st.divider()
-st.subheader("Aastate võrdlus")
-
-aastapohine = (
-    filtreeritud
-    .groupby(["aasta", "Suund"])["Piiriületuste arv"]
-    .sum()
-    .unstack("Suund", fill_value=0)
-    .sort_index()
-)
-
-for suund in ["Sisenemised", "Väljumised"]:
-    if suund not in aastapohine.columns:
-        aastapohine[suund] = 0
-
-aastapohine["Erinevus"] = (
-    aastapohine["Sisenemised"]
-    - aastapohine["Väljumised"]
-)
-
-fig_aastad = go.Figure()
-
-fig_aastad.add_trace(
-    go.Bar(
-        x=aastapohine.index.astype(str),
-        y=aastapohine["Sisenemised"],
-        name="Sisenemised",
-        marker_color="#178939"
-    )
-)
-
-fig_aastad.add_trace(
-    go.Bar(
-        x=aastapohine.index.astype(str),
-        y=aastapohine["Väljumised"],
-        name="Väljumised",
-        marker_color="#2878B5"
-    )
-)
-
-fig_aastad.update_layout(
-    barmode="group",
-    xaxis_title="Aasta",
-    yaxis_title="Piiriületuste arv",
-    template="plotly_white",
-    height=420
-)
-
-st.plotly_chart(fig_aastad, width="stretch")
-
-
-# ------------------------------------------
-# SISENEMISTE JA VÄLJUMISTE VAHE
-# ------------------------------------------
-
 st.subheader("Sisenemiste ja väljumiste kuine erinevus")
-
-kuupohine["Erinevus"] = (
-    kuupohine["Sisenemised"]
-    - kuupohine["Väljumised"]
-)
-
-fig_erinevus = go.Figure()
-
-fig_erinevus.add_trace(
-    go.Bar(
-        x=kuupohine.index,
-        y=kuupohine["Erinevus"],
-        marker_color=[
-            "#178939" if x >= 0 else "#D9534F"
-            for x in kuupohine["Erinevus"]
-        ],
-        name="Erinevus"
-    )
-)
-
-fig_erinevus.add_hline(
-    y=0,
-    line_color="gray",
-    line_width=1
-)
-
+kuupohine["Erinevus"] = kuupohine["Sisenemised"] - kuupohine["Väljumised"]
+fig_erinevus = go.Figure(go.Bar(
+    x=kuupohine.index, y=kuupohine["Erinevus"],
+    marker_color=["#178939" if x >= 0 else "#D9534F"
+                  for x in kuupohine["Erinevus"]],
+    name="Erinevus",
+))
+fig_erinevus.add_hline(y=0, line_color="gray", line_width=1)
 fig_erinevus.update_layout(
-    xaxis_title="Aeg",
-    yaxis_title="Sisenemised − väljumised",
-    template="plotly_white",
-    height=420
+    xaxis_title="Aeg", yaxis_title="Sisenemised − väljumised",
+    template="plotly_white", height=420,
 )
-
 st.plotly_chart(fig_erinevus, width="stretch")
 
-
 # ------------------------------------------
-# PIIRIPUNKTIDE VÕRDLUS
+# F. PIIRIPUNKTIDE VÕRDLUS – HEATMAP
 # ------------------------------------------
 
 st.divider()
-st.subheader("Piiripunktide võrdlus")
+st.subheader("Piiripunktide võrdlus – heatmap")
 
-punktide_tabel = (
-    filtreeritud
-    .groupby(["Piiripunkt", "Suund"])["Piiriületuste arv"]
-    .sum()
-    .unstack("Suund", fill_value=0)
-)
-
-for suund in ["Sisenemised", "Väljumised"]:
-    if suund not in punktide_tabel.columns:
-        punktide_tabel[suund] = 0
-
-punktide_tabel["Erinevus"] = (
-    punktide_tabel["Sisenemised"]
-    - punktide_tabel["Väljumised"]
-)
-
-punktide_tabel["Kokku"] = (
-    punktide_tabel["Sisenemised"]
-    + punktide_tabel["Väljumised"]
-)
-
-top_punktid = (
-    punktide_tabel
-    .sort_values("Kokku", ascending=False)
-    .head(15)
-    .sort_values("Kokku", ascending=True)
-)
-
-fig_punktid = go.Figure()
-
-for suund, varv in [
-    ("Sisenemised", "#178939"),
-    ("Väljumised", "#2878B5")
-]:
-    fig_punktid.add_trace(
-        go.Bar(
-            y=top_punktid.index,
-            x=top_punktid[suund],
-            name=suund,
-            orientation="h",
-            marker_color=varv
-        )
+hc1, hc2 = st.columns([1, 1])
+with hc1:
+    heat_suund = st.segmented_control(
+        "Heatmap'i suund", ["Sisenemised", "Väljumised"],
+        default="Sisenemised", key="sv_heat_suund"
+    )
+with hc2:
+    heat_tyyp = st.segmented_control(
+        "Heatmap'i väärtus", ["Arv", "Osakaal aastas (%)"],
+        default="Arv", key="sv_heat_tyyp"
     )
 
-fig_punktid.update_layout(
-    title="15 suurima kogumahuga piiripunkti",
-    barmode="group",
-    xaxis_title="Piiriületuste arv",
-    yaxis_title="",
-    template="plotly_white",
-    height=550
+heat_alus = filtreeritud.loc[filtreeritud["Suund"] == heat_suund]
+heat_top = (
+    heat_alus.groupby("Piiripunkt")["Piiriületuste arv"]
+    .sum().sort_values(ascending=False).head(18).index.tolist()
 )
+if not heat_top:
+    st.info("Valitud filtritega pole piiripunktide andmeid.")
+else:
+    heat = (
+        heat_alus.loc[heat_alus["Piiripunkt"].isin(heat_top)]
+        .groupby(["Piiripunkt", "aasta"])["Piiriületuste arv"]
+        .sum().unstack("aasta", fill_value=0)
+    )
+    heat = heat.reindex(index=heat_top[::-1],
+                        columns=sorted(aastad), fill_value=0)
+    if heat_tyyp == "Osakaal aastas (%)":
+        # Nimetaja: kogu valitud suuna vastava aasta maht (kõik piiripunktid).
+        aasta_kogus = (
+            heat_alus.groupby("aasta")["Piiriületuste arv"].sum()
+            .reindex(heat.columns, fill_value=0)
+        )
+        kuvatav = heat.div(aasta_kogus.replace(0, np.nan), axis=1) * 100
+        suffix = "%"
+        colorbar_title = "Osakaal %"
+    else:
+        kuvatav = heat
+        suffix = ""
+        colorbar_title = "Piiriületusi"
 
-st.plotly_chart(fig_punktid, width="stretch")
-
-
-# ------------------------------------------
-# AASTATE TABEL JA ALLALAADIMINE
-# ------------------------------------------
-
-st.divider()
-st.subheader("Aastate kokkuvõte")
-
-aastate_tabel = aastapohine.reset_index()
-
-st.dataframe(
-    aastate_tabel.style.format({
-        "Sisenemised": "{:,.0f}",
-        "Väljumised": "{:,.0f}",
-        "Erinevus": "{:+,.0f}"
-    }),
-    hide_index=True,
-    width="stretch"
-)
-
-st.download_button(
-    "Laadi aastate võrdlus alla (CSV)",
-    data=aastate_tabel.to_csv(
-        index=False,
-        sep=";"
-    ).encode("utf-8-sig"),
-    file_name="sisenemised_valjumised_aastad.csv",
-    mime="text/csv"
-)
+    fig_heat = go.Figure(go.Heatmap(
+        z=kuvatav.to_numpy(),
+        x=[str(x) for x in kuvatav.columns],
+        y=kuvatav.index.tolist(),
+        customdata=heat.to_numpy().reshape((*heat.shape, 1)),
+        colorscale=(
+            [[0, "#edf6ee"], [0.45, "#83caa2"], [1, "#0b7741"]]
+            if heat_suund == "Sisenemised" else
+            [[0, "#edf5fd"], [0.45, "#86bbdd"], [1, "#125e9c"]]
+        ),
+        colorbar=dict(title=colorbar_title, thickness=14),
+        hovertemplate=(
+            "%{y} · %{x}<br>Väärtus: %{z:,.2f}" + suffix +
+            "<br>Piiriületusi: %{customdata[0]:,.0f}<extra></extra>"
+        ),
+        xgap=2, ygap=2,
+    ))
+    fig_heat.update_layout(
+        xaxis_title="Aasta", yaxis_title="Piiripunkt",
+        height=max(510, 26 * len(heat_top) + 120),
+        margin=dict(l=10, r=10, t=25, b=35),
+    )
+    st.plotly_chart(fig_heat, width="stretch")
+    st.caption(
+        "Kuvatud on kuni 18 suurima kogumahuga piiripunkti. "
+        "2026 hõlmab jaanuari–oktoobrit. "
+        "Osakaal arvestatakse iga aasta valitud suuna kogumahust."
+    )
 
 st.caption(
     "2026. aasta tegelikud andmed lõpevad oktoobriga. "
-    "Prognoosid lisame eraldi, et tegelikud ja "
-    "prognoositud piiriületused ei seguneks."
+    "Prognoositud piiriületused ei kuulu selle lehe mõõdikutesse."
 )
