@@ -2163,6 +2163,151 @@ for suund, varvus in [("Sisenemised", "#178939"),
         mode="lines", name=suund,
         line=dict(color=varvus, width=2.5),
     ))
+# --- PPA SÜNDMUSTE TAUSTAKIHT (v1) ---
+# Need kuupäevad on sündmuste käsitsi kontrollitud metaandmed,
+# mitte Parquet-failist automaatselt laaditud tunnused.
+# Sündmuse esinemine ajajoonel ei tõenda põhjuslikku mõju.
+
+sv_sundmused = [
+    # 2017–2020: kontrollitud sündmused. NaT ei võrdu "jätkuv".
+    # Tähtajatu viisavabadus ja leevendused = algusmärgis;
+    # täpselt piiritletud kontroll või peatatud e-viisa = ajavahemik.
+    dict(nimi="Gruusia biomeetrilise passi viisavabadus", algus="2017-03-28", lopp=None,
+         punktid=(), tyyp=None, kodakondsused=("Gruusia", "GEO"),
+         kirjeldus="Viisavabadus jätkub tavapasside omanikele; erandid võivad kehtida muudele passiliikidele"),
+    dict(nimi="Ukraina biomeetrilise passi viisavabadus", algus="2017-06-11", lopp=None,
+         punktid=(), tyyp=None, kodakondsused=("Ukraina", "UKR"),
+         kirjeldus="Viisavabadus on jätkuv õiguslik muudatus; näidatakse ainult algust"),
+    dict(nimi="Peterburi ja Leningradi oblasti e-viisa süsteem", algus="2019-10-01", lopp="2020-03-18",
+         punktid=("Narva", "Koidula", "Luhamaa", "Saatse"), tyyp="Maismaapiir",
+         kirjeldus="Venemaa piirkondlik e-viisa; e-viisade väljastamine peatati 18.03.2020. See ei ole uue üleriigilise e-viisasüsteemi algus"),
+    dict(nimi="COVID-19: ajutine kontroll maismaapiiril", algus="2020-03-17", lopp="2020-05-14",
+         punktid=(), tyyp="Maismaapiir",
+         kirjeldus="Ajutise piirikontrolli periood maismaapiiril. Muud reisipiirangud ei lõppenud selle kuupäevaga"),
+    dict(nimi="COVID-19: ajutine kontroll õhu- ja merepiiril", algus="2020-03-17", lopp="2020-06-16",
+         punktid=(), tyyp=None, tyyp_valikud=("Õhupiir", "Merepiir"),
+         kirjeldus="Ajutise piirikontrolli periood õhu- ja merepiiril. Muud reisipiirangud kehtisid osaliselt edasi"),
+    dict(nimi="Balti riikide vahelise liikumise leevendamine", algus="2020-05-15", lopp=None,
+         punktid=("Ikla", "Valga", "Lilli", "Mõisaküla"), tyyp="Maismaapiir",
+         kirjeldus="Balti mulli algus; tingimused muutusid hiljem (sh 2020. aasta septembris). Algusmärgis, mitte jätkuv vahemik"),
+    dict(nimi="Euroopa riikidest Eestisse reisimise leevendamine", algus="2020-06-01", lopp=None,
+         punktid=(), tyyp=None,
+         kirjeldus="Leevenduste algus; tingimusi muudeti korduvalt, ühtset lõppkuupäeva ei ole"),
+    dict(nimi="ABC-väravad Tallinnas ja Narvas", algus="2021-02-10", lopp=None,
+         punktid=("Tallinna-1", "Narva-1"), tyyp=None,
+         kirjeldus="Automaatse piirikontrolli väravate kasutuselevõtt"),
+    dict(nimi="Ajutine Eesti–Läti piirikontroll", algus="2022-03-03", lopp="2022-05-24",
+         punktid=("Ikla", "Valga-1", "Valga-2", "Valga-3"), tyyp="Maismaapiir",
+         kirjeldus="Ajutine kontroll Eesti–Läti maismaapiiril"),
+    dict(nimi="Saatse automaatne piirikontroll", algus="2023-04-19", lopp=None,
+         punktid=("Saatse",), tyyp="Maismaapiir",
+         kirjeldus="Automaatse piirikontrolli süsteemi kasutuselevõtt"),
+    dict(nimi="Ivangorodi sõidukiliikluse sulgemine", algus="2024-02-01", lopp=None,
+         punktid=("Narva-1",), tyyp="Maismaapiir",
+         kirjeldus="Sõidukiliikluse piirang Narva–Ivangorodi suunal"),
+    dict(nimi="Narva-1 lahtiolekuaja piirang", algus="2024-05-01", lopp="2026-06-14",
+         punktid=("Narva-1",), tyyp="Maismaapiir",
+         kirjeldus="Narva-1 piiripunkti tööaeg 7–23"),
+    dict(nimi="Narva-1 ajutine täielik sulgemine", algus="2025-04-30", lopp="2025-05-02",
+         punktid=("Narva-1",), tyyp="Maismaapiir",
+         kirjeldus="Lühiajaline täielik sulgemine"),
+    dict(nimi="Koidula ja Luhamaa öine sulgemine", algus="2026-02-24", lopp="2026-08-31",
+         punktid=("Koidula", "Luhamaa"), tyyp="Maismaapiir",
+         kirjeldus="Öine sulgemine, piiratud tööaeg"),
+    dict(nimi="Narva-1 üleminek 12-tunnisele tööajale", algus="2026-06-15", lopp=None,
+         punktid=("Narva-1",), tyyp="Maismaapiir",
+         kirjeldus="Narva-1 tööaeg vähenes 12 tunnini"),
+    dict(nimi="Kuressaare lennujaama ajutine sulgemine", algus="2026-08-10", lopp="2026-08-31",
+         punktid=("Kuressaare-2", "Kuressaare"), tyyp="Õhupiir",
+         kirjeldus="Lennujaama ajutine sulgemine"),
+    dict(nimi="Piiripunktide 12-tunnine graafik", algus="2026-09-01", lopp=None,
+         punktid=("Narva-1", "Koidula", "Luhamaa", "Narva raudtee", "Koidula raudtee"),
+         tyyp="Maismaapiir", kirjeldus="Piiratud tööaja jätkumine määramata ajaks"),
+]
+
+sv_naita_sundmusi = st.toggle(
+    "Näita ajaloolisi sündmusi", value=True, key="sv_naita_dynaamika_sundmusi",
+    help="Õrnad taustaribad tähistavad sündmuste perioode, täpid üksikuid alguskuupäevi."
+)
+
+if sv_naita_sundmusi and not kuupohine.empty:
+    sv_min_x = pd.Timestamp(kuupohine.index.min())
+    sv_max_x = pd.Timestamp(kuupohine.index.max()) + pd.offsets.MonthEnd(1)
+    sv_ymax = float(kuupohine[["Sisenemised", "Väljumised"]].max().max())
+    # Kaitse tühi- ja nullmahu korral.
+    sv_ymax = sv_ymax if sv_ymax > 0 else 1.0
+    sv_marks_x, sv_marks_y, sv_marks_text = [], [], []
+    sv_nimetused = []
+
+    def sv_sundmus_sobib(s):
+        # Kui kasutaja valis konkreetsed piiripunktid, näitame ainult neid puudutavaid sündmusi.
+        # Ilma konkreetse punktivalikuta kontrollime piiripunkti tüüpi.
+        if s.get("tyyp_valikud") and not any(
+            t in piirityybid for t in s["tyyp_valikud"]
+        ):
+            return False
+        if s["tyyp"] and s["tyyp"] not in piirityybid:
+            return False
+        sihtriigid = s.get("kodakondsused", ())
+        if kodakondsused and sihtriigid:
+            if not any(
+                token.lower() in str(valik).lower()
+                for token in sihtriigid
+                for valik in kodakondsused
+            ):
+                return False
+        if piiripunktid and s["punktid"]:
+            return any(
+                token.lower() in str(punkt).lower()
+                for token in s["punktid"]
+                for punkt in piiripunktid
+            )
+        return True
+
+    for s in sv_sundmused:
+        if not sv_sundmus_sobib(s):
+            continue
+        algus = pd.Timestamp(s["algus"])
+        lopp = pd.Timestamp(s["lopp"]) if s["lopp"] else None
+        # Valitud ajavahemikust täielikult väljas olevat sündmust ei näidata.
+        if algus > sv_max_x or (lopp is not None and lopp < sv_min_x):
+            continue
+        sv_nimetused.append(s["nimi"])
+        if lopp is not None:
+            fig_kuud.add_vrect(
+                x0=max(algus, sv_min_x), x1=min(lopp, sv_max_x),
+                fillcolor="#8B97A5", opacity=0.10,
+                line_width=0, layer="below"
+            )
+        else:
+            fig_kuud.add_vline(
+                x=algus, line_color="#8B97A5",
+                line_dash="dot", line_width=1, opacity=0.55,
+                layer="below"
+            )
+        # Plotly shape'idel pole hoverit; nähtavad õrnad markerid pakuvad lisainfot.
+        sv_marks_x.append(min(max(algus, sv_min_x), sv_max_x))
+        sv_marks_y.append(sv_ymax * 1.02)
+        sv_marks_text.append(
+            f"<b>{s['nimi']}</b><br>Algus: {s['algus']}"
+            + (f"<br>Lõpp: {s['lopp']}" if s['lopp'] else "")
+            + f"<br>{s['kirjeldus']}"
+        )
+    if sv_marks_x:
+        fig_kuud.add_trace(go.Scatter(
+            x=sv_marks_x, y=sv_marks_y, mode="markers",
+            name="Sündmused", showlegend=True,
+            marker=dict(symbol="diamond", size=8, color="#7D8997", opacity=0.75),
+            text=sv_marks_text, hovertemplate="%{text}<extra></extra>",
+            cliponaxis=False,
+        ))
+        fig_kuud.update_yaxes(range=[0, sv_ymax * 1.13])
+        st.caption(
+            "◇ Sündmuse algus või ajalooline verstapost; hele taustriba näitab piiritletud perioodi. "
+            "Liigu teemandikujulisele markerile, et näha kuupäevi ja kirjeldust. "
+            "Sündmused ei tõenda põhjuslikku mõju."
+        )
+
 fig_kuud.update_layout(
     xaxis_title="Aeg", yaxis_title="Piiriületuste arv",
     hovermode="x unified", template="plotly_white", height=470,
