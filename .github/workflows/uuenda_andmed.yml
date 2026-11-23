@@ -3,8 +3,8 @@ name: PPA andmete automaatne uuendamine
 
 on:
   schedule:
-    # Igal neljapäeval kell 12:00 Eesti aja järgi
-    - cron: "0 12 * * 4"
+    # Igal neljapäeval kell 17:00 Eesti aja järgi
+    - cron: "0 17 * * 4"
       timezone: "Europe/Tallinn"
 
   # Võimaldab käivitada ka käsitsi
@@ -36,23 +36,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pandas pyarrow
-
-      - name: Kontrolli toetatud aastat
-        run: |
-          python - <<'PY'
-          from datetime import datetime
-          from zoneinfo import ZoneInfo
-
-          aasta = datetime.now(
-              ZoneInfo("Europe/Tallinn")
-          ).year
-
-          if aasta != 2026:
-              raise SystemExit(
-                  "Automaatika peatatud: skript vajab "
-                  f"{aasta}. aasta andmete tuge."
-              )
-          PY
 
       - name: Uuenda Parquet-failid
         run: python scripts/uuenda_andmed.py --publish

@@ -1,22 +1,22 @@
 
 from pathlib import Path
-from datetime import date
-import calendar
-import pandas as pd
+from datetime import date, datetime
+from urllib.error import HTTPError
 import argparse
+import calendar
 import os
 import shutil
-from datetime import datetime
 
-# ------------------------------------------
-# ASUKOHAD JA SEADISTUS
-# ------------------------------------------
+import pandas as pd
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ANDMEKAUST = ROOT / "streamlit_andmed"
 KONTROLLKAUST = ROOT / "_uuenduse_kontroll"
+VARUKOOPIAD = ROOT / "_uuenduse_varukoopiad"
 
-AASTA = 2026
+ALGUSAASTA = 2026
+LOPPAASTA = 2027
 
 TUNNUSED = [
     "Sugu",
@@ -29,19 +29,13 @@ TUNNUSED = [
 
 ALLIKAD = {
     "Sisenemised": {
-        "url": (
-            "https://opendata.smit.ee/ppa/csv/"
-            "piiriyletused_isikud_sisse_2026.csv"
-        ),
+        "suund": "sisse",
         "arv": "Piiriületajate arv",
         "kuu_fail": "sisenemised_2016_2026.parquet",
         "paeva_fail": "sisenemised_paevad_2016_2026.parquet",
     },
     "Väljumised": {
-        "url": (
-            "https://opendata.smit.ee/ppa/csv/"
-            "piiriyletused_isikud_valja_2026.csv"
-        ),
+        "suund": "valja",
         "arv": "Piirilt lahkujate arv",
         "kuu_fail": "valjumised_2016_2026.parquet",
         "paeva_fail": "valjumised_paevad_2016_2026.parquet",
@@ -49,126 +43,27 @@ ALLIKAD = {
 }
 
 
-# ------------------------------------------
-# ABIFUNKTSIOONID
-# ------------------------------------------
-
-def valmiskuu(aasta, kuu, viimane_kuupaev):
-    """Kuu peab olema lõppenud ja allikas peab katma kuu lõpu."""
-
-    viimane_paev = date(
-        aasta,
-        kuu,
-        calendar.monthrange(aasta, kuu)[1]
+def lae_csv(info, aasta):
+    url = (
+        "https://opendata.smit.ee/ppa/csv/"
+        f"piiriyletused_isikud_{info['suund']}_{aasta}.csv"
     )
 
-    return (
-        viimane_kuupaev >= viimane_paev
-        and date.today() > viimane_paev
-    )
-
-
-def yhenda_ajalugu(vana, uus, arv):
-    """Säilitame varasemad aastad ja asendame 2026 tervikuna."""
-
-    ajalugu = vana.loc[
-        vana["aasta"] < AASTA
-    ].copy()
-
-    tulemus = pd.concat(
-        [ajalugu, uus],
-        ignore_index=True
-    )
-
-    # Säilitame olemasoleva andmestruktuuri
-    tulemus = tulemus[vana.columns.tolist()]
-
-    tulemus["aasta"] = tulemus["aasta"].astype("int16")
-    tulemus["kuu"] = tulemus["kuu"].astype("int8")
-
-    for veerg in ["paev", "nadalapaev", "nadal"]:
-        if veerg in tulemus.columns:
-            tulemus[veerg] = tulemus[veerg].astype("int8")
-
-    for veerg in TUNNUSED:
-        tulemus[veerg] = tulemus[veerg].astype("category")
-
-    tulemus[arv] = tulemus[arv].astype("int64")
-
-    kuupaevaveerg = (
-        "Piiriületuse kpv"
-        if "Piiriületuse kpv" in tulemus.columns
-        else "Kuupäev"
-    )
-
-    tulemus[kuupaevaveerg] = (
-        pd.to_datetime(tulemus[kuupaevaveerg])
-        .astype("datetime64[us]")
-    )
-
-    return tulemus.sort_values(
-        [kuupaevaveerg, *TUNNUSED]
-    ).reset_index(drop=True)
-
-
-def kontrolli_tulemus(vana, uus, tulemus, arv, oodatud):
-    """Kontrollime ajalugu, struktuuri ja kogumahtu."""
-
-    if tulemus.columns.tolist() != vana.columns.tolist():
-        raise ValueError("Veergude struktuur on muutunud")
-
-    if tulemus.isna().any().any():
-        raise ValueError("Uues andmestikus on puuduvaid väärtusi")
-
-    if (tulemus[arv] < 0).any():
-        raise ValueError("Andmestikus on negatiivseid koguseid")
-
-    vana_ajalugu = vana.loc[
-        vana["aasta"] < AASTA, arv
-    ].sum()
-
-    uus_ajalugu = tulemus.loc[
-        tulemus["aasta"] < AASTA, arv
-    ].sum()
-
-    if vana_ajalugu != uus_ajalugu:
-        raise ValueError("Ajalooliste andmete maht muutus")
-
-    uus_aasta = tulemus.loc[
-        tulemus["aasta"] == AASTA, arv
-    ].sum()
-
-    if uus_aasta != oodatud:
-        raise ValueError(
-            f"2026 kogusumma ei klapi: {uus_aasta} != {oodatud}"
-        )
-
-
-# ------------------------------------------
-# ÜHE LIIKUMISSUUNA TÖÖTLUS
-# ------------------------------------------
-
-def tootle_suund(suund, info):
-
-    print(f"\n{'=' * 55}")
-    print("TÖÖTLEN:", suund)
-
-    df = pd.read_csv(
-        info["url"],
-        sep=None,
-        engine="python"
-    )
+    try:
+        df = pd.read_csv(url, sep=None, engine="python")
+    except HTTPError as e:
+        if e.code == 404 and aasta > ALGUSAASTA:
+            print(f"{aasta}: CSV pole veel avaldatud")
+            return None
+        raise
 
     vajalikud = ["Piiriületuse kpv", *TUNNUSED]
 
-    if df.empty:
-        raise ValueError(f"{suund}: CSV on tühi")
-
-    if not set(vajalikud).issubset(df.columns):
-        raise ValueError(f"{suund}: CSV veerud ei klapi")
+    if df.empty or not set(vajalikud).issubset(df.columns):
+        raise ValueError(f"{aasta}: CSV on tühi või veerud erinevad")
 
     if df[vajalikud].isna().any().any():
-        raise ValueError(f"{suund}: CSV sisaldab puuduvaid väärtusi")
+        raise ValueError(f"{aasta}: CSV sisaldab puuduvaid väärtusi")
 
     df["Piiriületuse kpv"] = pd.to_datetime(
         df["Piiriületuse kpv"],
@@ -176,13 +71,11 @@ def tootle_suund(suund, info):
         errors="raise"
     )
 
-    if not df["Piiriületuse kpv"].dt.year.eq(AASTA).all():
-        raise ValueError("CSV sisaldab vale aasta andmeid")
+    if not df["Piiriületuse kpv"].dt.year.eq(aasta).all():
+        raise ValueError(f"{aasta}: CSV sisaldab vale aasta kuupäevi")
 
-    viimane = df["Piiriületuse kpv"].max().date()
-
-    if viimane > date.today():
-        raise ValueError("CSV sisaldab tulevikukuupäevi")
+    if df["Piiriületuse kpv"].max().date() > date.today():
+        raise ValueError(f"{aasta}: CSV sisaldab tulevikukuupäevi")
 
     df["aasta"] = df["Piiriületuse kpv"].dt.year
     df["kuu"] = df["Piiriületuse kpv"].dt.month
@@ -190,13 +83,16 @@ def tootle_suund(suund, info):
     df["nadalapaev"] = df["Piiriületuse kpv"].dt.dayofweek
     df["nadal"] = df["Piiriületuse kpv"].dt.isocalendar().week.astype(int)
 
-    arv = info["arv"]
+    print(
+        f"{aasta}: {len(df):,} piiriületust; "
+        f"viimane päev {df['Piiriületuse kpv'].max().date()}"
+    )
 
-    # ------------------------------------------
-    # PÄEVAPÕHINE KOOND
-    # ------------------------------------------
+    return df
 
-    paeva_grupid = [
+
+def koonda_paevad(df, arv):
+    grupid = [
         "Piiriületuse kpv",
         "aasta",
         "kuu",
@@ -206,106 +102,214 @@ def tootle_suund(suund, info):
         *TUNNUSED,
     ]
 
-    uus_paev = (
-        df.groupby(
-            paeva_grupid,
-            observed=True,
-            dropna=False
-        )
+    tulemus = (
+        df.groupby(grupid, observed=True, dropna=False)
         .size()
         .reset_index(name=arv)
     )
 
-    if uus_paev[arv].sum() != len(df):
-        raise ValueError("Päevapõhine summa ei klapi CSV-ga")
+    if int(tulemus[arv].sum()) != len(df):
+        raise ValueError("Päevapõhiste andmete kogusumma ei klapi")
 
-    # ------------------------------------------
-    # KUUPÕHINE KOOND
-    # ------------------------------------------
+    return tulemus
 
-    valmis_kuud = [
-        kuu for kuu in range(1, 13)
-        if valmiskuu(AASTA, kuu, viimane)
-    ]
 
-    df_kuud = df.loc[
-        df["kuu"].isin(valmis_kuud)
+def koonda_kuud(df, arv):
+    # Võtame ainult allikas kaetud, juba lõppenud kuud.
+    valmis = []
+
+    for aasta, osa in df.groupby("aasta"):
+        viimane = osa["Piiriületuse kpv"].max().date()
+
+        for kuu in range(1, 13):
+            kuupaev = date(
+                int(aasta),
+                kuu,
+                calendar.monthrange(int(aasta), kuu)[1]
+            )
+
+            if viimane >= kuupaev and date.today() > kuupaev:
+                valmis.append((int(aasta), kuu))
+
+    kuud = pd.MultiIndex.from_frame(
+        df[["aasta", "kuu"]]
+    )
+
+    df = df.loc[
+        kuud.isin(pd.MultiIndex.from_tuples(
+            valmis, names=["aasta", "kuu"]
+        ))
     ].copy()
 
-    df_kuud["Kuupäev"] = (
-        df_kuud["Piiriületuse kpv"]
+    df["Kuupäev"] = (
+        df["Piiriületuse kpv"]
         .dt.to_period("M")
         .dt.to_timestamp()
     )
 
-    kuu_grupid = [
-        "Kuupäev",
-        "aasta",
-        "kuu",
-        *TUNNUSED,
+    grupid = [
+        "Kuupäev", "aasta", "kuu", *TUNNUSED
     ]
 
-    uus_kuu = (
-        df_kuud.groupby(
-            kuu_grupid,
-            observed=True,
-            dropna=False
-        )
+    tulemus = (
+        df.groupby(grupid, observed=True, dropna=False)
         .size()
         .reset_index(name=arv)
     )
 
-    if uus_kuu[arv].sum() != len(df_kuud):
-        raise ValueError("Kuupõhine summa ei klapi CSV-ga")
+    if int(tulemus[arv].sum()) != len(df):
+        raise ValueError("Kuupõhiste andmete kogusumma ei klapi")
 
-    # ------------------------------------------
-    # AJALOO ÜHENDAMINE
-    # ------------------------------------------
+    print("Täielikud kuud:", valmis)
+
+    return tulemus
+
+
+def yhenda_ajalugu(vana, uus, arv):
+    # 2016–2025 säilivad muutumatuna.
+    ajalugu = vana.loc[
+        vana["aasta"] < ALGUSAASTA
+    ].copy()
+
+    tulemus = pd.concat(
+        [ajalugu, uus],
+        ignore_index=True
+    )
+
+    tulemus = tulemus[vana.columns.tolist()]
+
+    tulemus["aasta"] = tulemus["aasta"].astype("int16")
+    tulemus["kuu"] = tulemus["kuu"].astype("int8")
+
+    for veerg in ("paev", "nadalapaev", "nadal"):
+        if veerg in tulemus.columns:
+            tulemus[veerg] = tulemus[veerg].astype("int8")
+
+    for veerg in TUNNUSED:
+        tulemus[veerg] = tulemus[veerg].astype("category")
+
+    tulemus[arv] = tulemus[arv].astype("int64")
+
+    kp = (
+        "Piiriületuse kpv"
+        if "Piiriületuse kpv" in tulemus.columns
+        else "Kuupäev"
+    )
+
+    tulemus[kp] = (
+        pd.to_datetime(tulemus[kp])
+        .astype("datetime64[us]")
+    )
+
+    return tulemus.sort_values(
+        [kp, *TUNNUSED]
+    ).reset_index(drop=True)
+
+
+def sama_sisu(vana, uus):
+    if len(vana) != len(uus):
+        return False
+
+    if vana.columns.tolist() != uus.columns.tolist():
+        return False
+
+    veerud = vana.columns.tolist()
+
+    a = vana.sort_values(veerud).reset_index(drop=True)
+    b = uus.sort_values(veerud).reset_index(drop=True)
+
+    try:
+        pd.testing.assert_frame_equal(
+            a,
+            b,
+            check_dtype=False,
+            check_categorical=False
+        )
+        return True
+    except AssertionError:
+        return False
+
+
+def tootle_suund(nimi, info):
+    print(f"\n{'=' * 55}")
+    print("TÖÖTLEN:", nimi)
+
+    aasta_now = date.today().year
+
+    if aasta_now > LOPPAASTA:
+        raise ValueError(
+            f"Lisa enne {aasta_now}. aastat uue aasta tugi"
+        )
+
+    osad = {}
+
+    for aasta in range(ALGUSAASTA, aasta_now + 1):
+        df = lae_csv(info, aasta)
+
+        if df is not None:
+            osad[aasta] = df
+
+    if ALGUSAASTA not in osad:
+        raise ValueError("2026. aasta lähtefail puudub")
+
+    arv = info["arv"]
 
     vana_paev = pd.read_parquet(
         ANDMEKAUST / info["paeva_fail"]
     )
 
-        # ------------------------------------------
-    # ANDMETE VÄHENEMISE KAITSE
-    # ------------------------------------------
-
-    vana_2026 = vana_paev[
-        vana_paev["aasta"] == AASTA
-    ]
-
-    vana_viimane = (
-        vana_2026["Piiriületuse kpv"].max().date()
-    )
-
-    vana_kogus = int(
-        vana_2026[arv].sum()
-    )
-
-    uus_kogus = len(df)
-
-    if viimane < vana_viimane:
-        raise ValueError(
-            f"{suund}: allika viimane kuupäev "
-            f"liikus tagasi ({vana_viimane} -> {viimane})"
-        )
-
-    if uus_kogus < vana_kogus:
-        raise ValueError(
-            f"{suund}: andmete kogumaht vähenes "
-            f"({vana_kogus} -> {uus_kogus})"
-        )
-
-    print("\nANDMETE VÄHENEMISE KONTROLL")
-    print("Vana viimane kuupäev:", vana_viimane)
-    print("Uus viimane kuupäev:", viimane)
-    print("Vana 2026 kogus:", vana_kogus)
-    print("Uus 2026 kogus:", uus_kogus)
-    print("Tulemus: KORRAS")
-
     vana_kuu = pd.read_parquet(
         ANDMEKAUST / info["kuu_fail"]
     )
+
+    for aasta, df in osad.items():
+        vana_osa = vana_paev.loc[
+            vana_paev["aasta"] == aasta
+        ]
+
+        if not vana_osa.empty:
+            vana_summa = int(vana_osa[arv].sum())
+
+            if len(df) < vana_summa:
+                raise ValueError(
+                    f"{nimi} {aasta}: kogumaht vähenes "
+                    f"{vana_summa} -> {len(df)}"
+                )
+
+            vana_viimane = (
+                vana_osa["Piiriületuse kpv"].max().date()
+            )
+
+            uus_viimane = (
+                df["Piiriületuse kpv"].max().date()
+            )
+
+            if uus_viimane < vana_viimane:
+                raise ValueError(
+                    f"{nimi} {aasta}: viimane kuupäev liikus tagasi"
+                )
+
+    # Kui 2027 CSV puudub, ei tohi juba avaldatud
+    # 2027 andmeid kogemata ära kustutada.
+    aastad_failis = set(
+        vana_paev.loc[
+            vana_paev["aasta"] >= ALGUSAASTA,
+            "aasta"
+        ].astype(int)
+    )
+
+    if not aastad_failis.issubset(osad.keys()):
+        raise ValueError(
+            f"{nimi}: mõne juba avaldatud aasta CSV puudub"
+        )
+
+    df = pd.concat(
+        list(osad.values()),
+        ignore_index=True
+    )
+
+    uus_paev = koonda_paevad(df, arv)
+    uus_kuu = koonda_kuud(df, arv)
 
     paevad = yhenda_ajalugu(
         vana_paev, uus_paev, arv
@@ -315,21 +319,26 @@ def tootle_suund(suund, info):
         vana_kuu, uus_kuu, arv
     )
 
-    kontrolli_tulemus(
-        vana_paev, uus_paev, paevad,
-        arv, len(df)
-    )
+    # Ajalugu peab säilima täpselt.
+    for vana, uus in [
+        (vana_paev, paevad),
+        (vana_kuu, kuud),
+    ]:
+        vana_ajalugu = vana.loc[
+            vana["aasta"] < ALGUSAASTA
+        ]
 
-    kontrolli_tulemus(
-        vana_kuu, uus_kuu, kuud,
-        arv, len(df_kuud)
-    )
+        uus_ajalugu = uus.loc[
+            uus["aasta"] < ALGUSAASTA
+        ]
 
-    print("CSV ridu:", len(df))
+        if not sama_sisu(vana_ajalugu, uus_ajalugu):
+            raise ValueError(
+                f"{nimi}: ajaloolised andmed muutusid"
+            )
+
     print("Päevapõhiseid ridu:", len(paevad))
     print("Kuupõhiseid ridu:", len(kuud))
-    print("Viimane tegelik päev:", viimane)
-    print("Täielikud kuud:", valmis_kuud)
     print("Valideerimine: KORRAS")
 
     return {
@@ -338,57 +347,47 @@ def tootle_suund(suund, info):
     }
 
 
+def avalda_failid(muudetud):
+    if not muudetud:
+        print("Andmed pole muutunud. Avaldamist pole vaja.")
+        return
 
-def avalda_failid(tulemused):
-    """
-    Avaldab valideeritud failid.
-    Enne asendamist tehakse varukoopiad.
-    Vea korral taastatakse vanad failid.
-    """
+    VARUKOOPIAD.mkdir(parents=True, exist_ok=True)
 
     varukoopia = (
-        ROOT
-        / "_uuenduse_varukoopiad"
+        VARUKOOPIAD
         / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     )
-    varukoopia.mkdir(parents=True, exist_ok=False)
 
-    # Kõik neli uut faili peavad olemas olema.
-    for fail in tulemused:
-        uus = KONTROLLKAUST / fail
-        vana = ANDMEKAUST / fail
+    varukoopia.mkdir()
 
-        if not uus.is_file() or not vana.is_file():
-            raise FileNotFoundError(
-                f"Puuduv fail: {fail}"
-            )
-
-    # Teeme kõigist originaalidest varukoopiad.
-    for fail in tulemused:
+    for fail in muudetud:
         shutil.copy2(
             ANDMEKAUST / fail,
             varukoopia / fail
         )
 
-    print("\nVARUKOOPIAD:", varukoopia)
-
     try:
-        for fail in tulemused:
-            uus = KONTROLLKAUST / fail
-            siht = ANDMEKAUST / fail
+        for fail in muudetud:
             ajutine = ANDMEKAUST / f"{fail}.tmp"
 
-            shutil.copy2(uus, ajutine)
-            os.replace(ajutine, siht)
+            shutil.copy2(
+                KONTROLLKAUST / fail,
+                ajutine
+            )
+
+            os.replace(
+                ajutine,
+                ANDMEKAUST / fail
+            )
 
             print("AVALDATUD:", fail)
 
     except Exception:
-        print("AVALDAMINE EBAÕNNESTUS. Taastan varukoopiad.")
-
-        for fail in tulemused:
-            ajutine = ANDMEKAUST / f"{fail}.tmp"
-            ajutine.unlink(missing_ok=True)
+        for fail in muudetud:
+            (ANDMEKAUST / f"{fail}.tmp").unlink(
+                missing_ok=True
+            )
 
             shutil.copy2(
                 varukoopia / fail,
@@ -397,72 +396,57 @@ def avalda_failid(tulemused):
 
         raise
 
-    print("\nKÕIK NELI FAILI AVALDATUD")
-
-
-# ------------------------------------------
-# PÕHIPROTSESS – KONTROLLREŽIIM
-# ------------------------------------------
+    print("Avaldamine lõpetatud")
 
 
 def main():
-
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--publish",
-        action="store_true",
-        help="Avalda kontrollitud andmed Streamliti andmekausta"
+        action="store_true"
     )
 
     args = parser.parse_args()
 
     tulemused = {}
 
-    for suund, info in ALLIKAD.items():
+    for nimi, info in ALLIKAD.items():
         tulemused.update(
-            tootle_suund(suund, info)
+            tootle_suund(nimi, info)
         )
 
-    KONTROLLKAUST.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    # Valideerime kõik enne ühegi faili muutmist.
+    KONTROLLKAUST.mkdir(parents=True, exist_ok=True)
+
+    muudetud = []
 
     for fail, df in tulemused.items():
+        vana = pd.read_parquet(ANDMEKAUST / fail)
+
+        if sama_sisu(vana, df):
+            print("MUUTUMATU:", fail)
+            continue
 
         tee = KONTROLLKAUST / fail
+        df.to_parquet(tee, index=False)
 
-        df.to_parquet(
-            tee,
-            index=False
-        )
+        kontroll = pd.read_parquet(tee)
 
-        uuesti = pd.read_parquet(tee)
-
-        arv = (
-            "Piiriületajate arv"
-            if "Piiriületajate arv" in df.columns
-            else "Piirilt lahkujate arv"
-        )
-
-        if (
-            len(uuesti) != len(df)
-            or uuesti[arv].sum() != df[arv].sum()
-            or uuesti.columns.tolist() != df.columns.tolist()
-        ):
+        if not sama_sisu(df, kontroll):
             raise ValueError(
-                f"Salvestamise kontroll ebaõnnestus: {fail}"
+                f"Salvestatud fail ei klapi: {fail}"
             )
 
-        print("KONTROLLITUD:", fail)
+        muudetud.append(fail)
+        print("MUUTUNUD:", fail)
 
-    print("\nKÕIK NELI FAILI VALIDEERITUD")
+    print(f"\nMuudetud faile: {len(muudetud)}")
 
     if args.publish:
-        avalda_failid(tulemused)
+        avalda_failid(muudetud)
     else:
-        print("Kontrollrežiim: originaalfaile ei muudetud.")
+        print("Kontrollrežiim: originaalfaile ei muudetud")
 
 
 if __name__ == "__main__":
