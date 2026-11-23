@@ -162,12 +162,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # ------------------------------------------
 # ANDMETE LAADIMINE
 # ------------------------------------------
 
 @st.cache_data(show_spinner="Laen andmeid...")
-def lae_liikumiste_andmed():
+def lae_liikumiste_andmed(failide_versioonid):
 
     sis = pd.read_parquet(
         ANDMEKAUST / "sisenemised_2016_2026.parquet"
@@ -192,11 +193,126 @@ def lae_liikumiste_andmed():
 
     df["Kuupäev"] = pd.to_datetime(df["Kuupäev"])
 
-    return df
+    # ------------------------------------------
+    # OSALISE KUU TEGELIKUD ANDMED
+    # ------------------------------------------
+
+    paevafailid = {
+        "Sisenemised": (
+            "sisenemised_paevad_2016_2026.parquet",
+            "Piiriületajate arv"
+        ),
+        "Väljumised": (
+            "valjumised_paevad_2016_2026.parquet",
+            "Piirilt lahkujate arv"
+        ),
+    }
+
+    tunnused = [
+        "Sugu",
+        "Vanuserühm",
+        "Riikide grupp",
+        "Kodakondsus",
+        "Piiripunkti tüüp",
+        "Piiripunkt",
+    ]
+
+    osalised = []
+    osalised_kuud = {}
+
+    for suund, (fail, arv) in paevafailid.items():
+
+        paevad = pd.read_parquet(
+            ANDMEKAUST / fail,
+            columns=[
+                "Piiriületuse kpv",
+                "aasta",
+                "kuu",
+                *tunnused,
+                arv,
+            ]
+        )
+
+        paevad["Piiriületuse kpv"] = pd.to_datetime(
+            paevad["Piiriületuse kpv"]
+        )
+
+        # Leiame viimase avaldatud päeva.
+        viimane_paev = paevad["Piiriületuse kpv"].max()
+
+        kuu_algus = viimane_paev.to_period("M").to_timestamp()
+
+        # Kui kuu on kuupõhises failis juba olemas,
+        # ei lisa me seda uuesti.
+        kuupohised_kuud = df.loc[
+            df["Suund"] == suund,
+            "Kuupäev"
+        ]
+
+        if kuu_algus in set(kuupohised_kuud):
+            continue
+
+        # Koondame ainult viimase osalise kuu.
+        osaline = paevad.loc[
+            paevad["Piiriületuse kpv"].dt.to_period("M")
+            == viimane_paev.to_period("M")
+        ].copy()
+
+        osaline["Kuupäev"] = kuu_algus
+
+        osaline = (
+            osaline.groupby(
+                [
+                    "Kuupäev",
+                    "aasta",
+                    "kuu",
+                    *tunnused,
+                ],
+                observed=True,
+                dropna=False
+            )[arv]
+            .sum()
+            .reset_index()
+        )
+
+        osaline = osaline.rename(columns={
+            arv: "Piiriületuste arv"
+        })
+
+        osaline["Suund"] = suund
+
+        osalised.append(osaline)
+
+        osalised_kuud[suund] = {
+            "kuu": kuu_algus,
+            "viimane_paev": viimane_paev,
+        }
+
+    if osalised:
+        df = pd.concat(
+            [df, *osalised],
+            ignore_index=True
+        )
+
+    return df, osalised_kuud
 
 
-andmed = lae_liikumiste_andmed()
+# Cache uueneb automaatselt, kui mõni andmefail muutub.
+andmefailid = [
+    "sisenemised_2016_2026.parquet",
+    "valjumised_2016_2026.parquet",
+    "sisenemised_paevad_2016_2026.parquet",
+    "valjumised_paevad_2016_2026.parquet",
+]
 
+failide_versioonid = tuple(
+    (fail, (ANDMEKAUST / fail).stat().st_mtime_ns)
+    for fail in andmefailid
+)
+
+andmed, osalised_kuud = lae_liikumiste_andmed(
+    failide_versioonid
+)
 
 @st.cache_resource(show_spinner="Laen päevapõhiseid andmeid...")
 def lae_paevased_andmed():
@@ -217,6 +333,77 @@ def lae_paevased_andmed():
         columns=filtriveerud + ["Piirilt lahkujate arv"],
     )
     return sis, val
+
+
+# ------------------------------------------
+# PPA TEGELIKE ANDMETE VIIMASED KUUPÄEVAD
+# ------------------------------------------
+
+@st.cache_data(show_spinner=False)
+def lae_ppa_andmeseis(failide_versioonid):
+    kaust = Path(__file__).resolve().parents[1] / "streamlit_andmed"
+
+    def viimane_kuupaev(fail, veerg):
+        df = pd.read_parquet(
+            kaust / fail,
+            columns=[veerg]
+        )
+        return pd.to_datetime(df[veerg].max())
+
+    sisse_paev = viimane_kuupaev(
+        "sisenemised_paevad_2016_2026.parquet",
+        "Piiriületuse kpv"
+    )
+
+    valja_paev = viimane_kuupaev(
+        "valjumised_paevad_2016_2026.parquet",
+        "Piiriületuse kpv"
+    )
+
+    sisse_kuu = viimane_kuupaev(
+        "sisenemised_2016_2026.parquet",
+        "Kuupäev"
+    )
+
+    valja_kuu = viimane_kuupaev(
+        "valjumised_2016_2026.parquet",
+        "Kuupäev"
+    )
+
+    return sisse_paev, valja_paev, min(sisse_kuu, valja_kuu)
+
+
+def ppa_andmeseis_tekstina():
+    kaust = Path(__file__).resolve().parents[1] / "streamlit_andmed"
+
+    failid = [
+        "sisenemised_paevad_2016_2026.parquet",
+        "valjumised_paevad_2016_2026.parquet",
+        "sisenemised_2016_2026.parquet",
+        "valjumised_2016_2026.parquet",
+    ]
+
+    # Cache uueneb, kui mõni andmefail muutub.
+    versioonid = tuple(
+        (fail, (kaust / fail).stat().st_mtime_ns)
+        for fail in failid
+    )
+
+    sisse, valja, kuu = lae_ppa_andmeseis(versioonid)
+
+    kuunimed = [
+        "Jaanuar", "Veebruar", "Märts", "Aprill",
+        "Mai", "Juuni", "Juuli", "August",
+        "September", "Oktoober", "November", "Detsember"
+    ]
+
+    return (
+        sisse.strftime("%d.%m.%Y"),
+        valja.strftime("%d.%m.%Y"),
+        f"{kuunimed[kuu.month - 1]} {kuu.year}"
+    )
+
+
 
 
 # ------------------------------------------
@@ -408,6 +595,45 @@ for veerg, valitud in prognoosi_filtrid.items():
 
 filtreeritud_prognoos = prognoosid.loc[prognoosi_mask].copy()
 
+
+# ------------------------------------------
+# TEGELIKUD ANDMED ASENDAVAD KUU PROGNOOSI
+# ------------------------------------------
+
+# Leiame kuud, mille kohta on tegelikud andmed.
+# Kontroll toimub liikumissuuna ja kuu kaupa.
+tegelikud_kuud = (
+    andmed[["Suund", "Kuupäev"]]
+    .drop_duplicates()
+    .copy()
+)
+
+tegelikud_kuud["Kuupäev"] = (
+    pd.to_datetime(tegelikud_kuud["Kuupäev"])
+    .dt.to_period("M")
+    .dt.to_timestamp()
+)
+
+filtreeritud_prognoos["Kuupäev"] = (
+    pd.to_datetime(filtreeritud_prognoos["Kuupäev"])
+    .dt.to_period("M")
+    .dt.to_timestamp()
+)
+
+# Kui kuu tegelikud andmed on olemas,
+# eemaldame selle kuu prognoosi.
+filtreeritud_prognoos = (
+    filtreeritud_prognoos.merge(
+        tegelikud_kuud.assign(_tegelik=True),
+        on=["Suund", "Kuupäev"],
+        how="left"
+    )
+    .loc[lambda x: x["_tegelik"].isna()]
+    .drop(columns="_tegelik")
+    .copy()
+)
+
+
 # Mudelite prognoosid jäävad eraldi
 prognoos_A7 = filtreeritud_prognoos[
     filtreeritud_prognoos["Mudel"] == "A7"
@@ -437,9 +663,32 @@ naita_prognoosi = st.toggle(
     key="sv_naita_prognoosi"
 )
 
+
 aktiivne_prognoos = filtreeritud_prognoos[
     filtreeritud_prognoos["Mudel"] == valitud_mudel
 ].copy()
+
+
+
+aktiivne_prognoos["Kuupäev"] = pd.to_datetime(
+    aktiivne_prognoos["Kuupäev"]
+).dt.to_period("M").dt.to_timestamp()
+
+tegelikud_kuud["Kuupäev"] = pd.to_datetime(
+    tegelikud_kuud["Kuupäev"]
+).dt.to_period("M").dt.to_timestamp()
+
+aktiivne_prognoos = (
+    aktiivne_prognoos.merge(
+        tegelikud_kuud.assign(_tegelik_olemas=True),
+        on=["Suund", "Kuupäev"],
+        how="left"
+    )
+    .loc[lambda df: df["_tegelik_olemas"].isna()]
+    .drop(columns="_tegelik_olemas")
+    .copy()
+)
+
 
 # ------------------------------------------
 # TEGELIKE ANDMETE JA PROGNOOSIDE KONTROLL
@@ -1026,8 +1275,55 @@ val_m["yoy"] = arvuta_yoy_uhiselt("Väljumised")
 
 
 # ------------------------------------------
+# OSALISE KUU KASVUVÕRDLUSTE KONTROLL
+# ------------------------------------------
+
+# Kas valitud periood sisaldab osalist tegelikku kuud?
+valikus_osaline_kuu = any(
+    info["kuu"].year in aastad
+    and info["kuu"].month in kuud
+    for info in osalised_kuud.values()
+)
+
+# Arvestame ka olukorda, kus 2027 prognoosi
+# võrreldakse 2026. aasta osaliste andmetega.
+osaline_vordlusperioodis = any(
+    info["kuu"].month in kuud
+    and (
+        info["kuu"].year in aastad
+        or (
+            naita_prognoosi
+            and 2027 in aastad
+            and info["kuu"].year == 2026
+        )
+    )
+    for info in osalised_kuud.values()
+)
+
+if osaline_vordlusperioodis:
+
+    for moodikud in (sis_m, val_m):
+
+        # Osalise perioodiga kasvuvõrdlusi
+        # ei esitata lõplike tulemustena.
+        moodikud["muutus"] = None
+        moodikud["cagr"] = None
+        moodikud["yoy"] = None
+        moodikud["muutus_12k"] = None
+
+    st.info(
+        "Valitud võrdlusperiood sisaldab osalist kuud. "
+        "Tegelikud PPA andmed on saadaval kuni "
+        f"{max(info['viimane_paev'] for info in osalised_kuud.values()):%d.%m.%Y}. "
+        "Kasvuvõrdlusi (muutus, CAGR, YoY ja viimase "
+        "12 kuu muutus) ei kuvata, sest perioodid "
+        "ei ole täielikult võrreldavad."
+    )
+
+# ------------------------------------------
 # KOMPAKTSED PÕHINÄITAJAD
 # ------------------------------------------
+
 
 # ------------------------------------------
 # TEGELIKUD + PROGNOOSITUD MAHUD
@@ -1113,73 +1409,169 @@ yoy_silt = (
     else "YoY"
 )
 
+if osaline_vordlusperioodis:
+    yoy_silt = "YoY (osaline kuu)"
+
 with moodikute_koht.container():
+
+    ppa_sisse, ppa_valja, ppa_kuu = ppa_andmeseis_tekstina()
 
     st.html(
         f"""
-        <div class="sv-metrics-grid">
+        <style>
+        .sv-ppa-layout {{
+            display: grid;
+            grid-template-columns: minmax(0, 5fr) minmax(215px, 1.65fr);
+            align-items: stretch;
+            gap: 16px;
+            width: 100%;
+        }}
 
-            <div class="sv-metric">
-                <div class="sv-label">
-                    Sisenemised
-                    {'(koos prognoosiga)' if naita_prognoosi and sis_prognoos else ''}
+        .sv-ppa-layout .sv-metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            width: 100%;
+            min-width: 0;
+        }}
+
+        .sv-ppa-status {{
+            border: 1px solid rgba(128, 128, 128, 0.24);
+            border-radius: 10px;
+            padding: 11px 14px;
+            background: rgba(128, 128, 128, 0.045);
+            min-width: 0;
+        }}
+
+        .sv-ppa-heading {{
+            font-size: 12px;
+            font-weight: 650;
+            margin-bottom: 9px;
+        }}
+
+        .sv-ppa-row {{
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 8px;
+            margin-top: 6px;
+            font-size: 11px;
+        }}
+
+        .sv-ppa-row span {{
+            color: var(--text-color, inherit);
+            opacity: 0.7;
+        }}
+
+        .sv-ppa-row strong {{
+            font-size: 12px;
+            font-weight: 650;
+            white-space: nowrap;
+        }}
+
+        .sv-ppa-month {{
+            border-top: 1px solid rgba(128, 128, 128, 0.20);
+            padding-top: 7px;
+            margin-top: 9px;
+        }}
+
+        @media (max-width: 1050px) {{
+            .sv-ppa-layout {{
+                grid-template-columns: 1fr;
+            }}
+        }}
+        </style>
+
+        <div class="sv-ppa-layout">
+
+            <!-- VIIS OLEMASOLEVAT MÕÕDIKUT -->
+            <div class="sv-metrics-grid">
+
+                <div class="sv-metric">
+                    <div class="sv-label">
+                        Sisenemised
+                        {'(koos prognoosiga)' if naita_prognoosi and sis_prognoos else ''}
+                    </div>
+                    <div class="sv-value">
+                        {lyhi_arv(sis_kokku)}
+                    </div>
                 </div>
-                <div class="sv-value">
-                    {lyhi_arv(sis_kokku)}
+
+                <div class="sv-metric">
+                    <div class="sv-label">
+                        Väljumised
+                        {'(koos prognoosiga)' if naita_prognoosi and val_prognoos else ''}
+                    </div>
+                    <div class="sv-value">
+                        {lyhi_arv(val_kokku)}
+                    </div>
                 </div>
+
+                <div class="sv-metric">
+                    <div class="sv-label">Erinevus</div>
+                    <div class="sv-value">
+                        {vorminda_arv(erinevus, True)}
+                    </div>
+                    <div class="sv-small"
+                         style="color:{varv(erinevus_pct)};">
+                        {vorminda_pct(erinevus_pct)}
+                    </div>
+                </div>
+
+                <div class="sv-metric">
+                    <div class="sv-label">CAGR</div>
+                    <div class="sv-small"
+                         style="color:{varv(sis_m['cagr'])};">
+                        S: {vorminda_pct(sis_m['cagr'])}
+                    </div>
+                    <div class="sv-small"
+                         style="color:{varv(val_m['cagr'])};">
+                        V: {vorminda_pct(val_m['cagr'])}
+                    </div>
+                </div>
+
+                <div class="sv-metric">
+                    <div class="sv-label">{yoy_silt}</div>
+                    <div class="sv-small"
+                         style="color:{varv(sis_m['yoy'])};">
+                        S: {vorminda_pct(sis_m['yoy'])}
+                    </div>
+                    <div class="sv-small"
+                         style="color:{varv(val_m['yoy'])};">
+                        V: {vorminda_pct(val_m['yoy'])}
+                    </div>
+                </div>
+
             </div>
 
-            <div class="sv-metric">
-                <div class="sv-label">
-                    Väljumised
-                    {'(koos prognoosiga)' if naita_prognoosi and val_prognoos else ''}
-                </div>
-                <div class="sv-value">
-                    {lyhi_arv(val_kokku)}
-                </div>
-            </div>
+            <!-- PPA ANDMETE SEIS -->
+            <div class="sv-ppa-status">
 
-            <div class="sv-metric">
-                <div class="sv-label">Erinevus</div>
-                <div class="sv-value">
-                    {vorminda_arv(erinevus, True)}
+                <div class="sv-ppa-heading">
+                    📅 PPA tegelike andmete seis
                 </div>
-                <div class="sv-small"
-                    style="color:{varv(erinevus_pct)};">
-                    {vorminda_pct(erinevus_pct)}
-                </div>
-            </div>
 
-            <div class="sv-metric">
-                <div class="sv-label">CAGR</div>
-                <div class="sv-small"
-                    style="color:{varv(sis_m['cagr'])};">
-                    S: {vorminda_pct(sis_m['cagr'])}
+                <div class="sv-ppa-row">
+                    <span>Sisenemised</span>
+                    <strong>{ppa_sisse}</strong>
                 </div>
-                <div class="sv-small"
-                    style="color:{varv(val_m['cagr'])};">
-                    V: {vorminda_pct(val_m['cagr'])}
-                </div>
-            </div>
 
-            <div class="sv-metric">
-                <div class="sv-label">{yoy_silt}</div>
-                <div class="sv-small"
-                    style="color:{varv(sis_m['yoy'])};">
-                    S: {vorminda_pct(sis_m['yoy'])}
+                <div class="sv-ppa-row">
+                    <span>Väljumised</span>
+                    <strong>{ppa_valja}</strong>
                 </div>
-                <div class="sv-small"
-                    style="color:{varv(val_m['yoy'])};">
-                    V: {vorminda_pct(val_m['yoy'])}
+
+                <div class="sv-ppa-row sv-ppa-month">
+                    <span>Viimane täielik kuu</span>
+                    <strong>{ppa_kuu}</strong>
                 </div>
+
             </div>
 
         </div>
         """
     )
-        
-        
 
+        
 with sticky_riba:
     with st.expander(
         "📊 Täiendavad kasvunäitajad ja võrdlus",
@@ -2712,14 +3104,87 @@ for suund in ("Sisenemised", "Väljumised"):
     if suund not in kuupohine.columns:
         kuupohine[suund] = 0
 
+
+
 fig_kuud = go.Figure()
-for suund, varvus in [("Sisenemised", "#178939"),
-                     ("Väljumised", "#2878B5")]:
-    fig_kuud.add_trace(go.Scatter(
-        x=kuupohine.index, y=kuupohine[suund],
-        mode="lines", name=suund,
-        line=dict(color=varvus, width=2.5),
-    ))
+
+for suund, varvus in [
+    ("Sisenemised", "#178939"),
+    ("Väljumised", "#2878B5")
+]:
+
+    # Täielike kuude joon.
+    # Osalise kuu väärtus jääb eraldi markerina alles.
+    joone_vaartused = kuupohine[suund].astype(float).copy()
+
+    if suund in osalised_kuud:
+        osaline_kuu = pd.Timestamp(
+            osalised_kuud[suund]["kuu"]
+        )
+
+        if osaline_kuu in joone_vaartused.index:
+            joone_vaartused.loc[osaline_kuu] = float("nan")
+
+    fig_kuud.add_trace(
+        go.Scatter(
+            x=kuupohine.index,
+            y=joone_vaartused,
+            mode="lines",
+            name=suund,
+            line=dict(color=varvus, width=2.5),
+            connectgaps=False,
+        )
+    )
+
+    # Osalise kuu tegelik punkt
+    if suund in osalised_kuud:
+
+        info = osalised_kuud[suund]
+        kuu = pd.Timestamp(info["kuu"])
+        viimane_paev = pd.Timestamp(info["viimane_paev"])
+
+        if kuu in kuupohine.index:
+
+            maht = kuupohine.loc[kuu, suund]
+
+            fig_kuud.add_trace(
+                go.Scatter(
+                    x=[kuu],
+                    y=[maht],
+                    mode="markers",
+                    marker=dict(
+                        color=varvus,
+                        size=13,
+                        symbol="circle-open",
+                        line=dict(width=3, color=varvus)
+                    ),
+                    name=f"{suund} – osaline kuu",
+                    showlegend=False,
+                    hovertemplate=(
+                        "<b>Osaline kuu – tegelikud andmed</b>"
+                        f"<br>{suund}"
+                        f"<br>Andmed kuni {viimane_paev:%d.%m.%Y}"
+                        "<br>Piiriületusi: %{y:,.0f}"
+                        "<extra></extra>"
+                    )
+                )
+            )
+
+            fig_kuud.add_annotation(
+                x=kuu,
+                y=maht,
+                text=f"Osaline kuu<br>kuni {viimane_paev:%d.%m.%Y}",
+                showarrow=True,
+                arrowhead=2,
+                ax=0,
+                ay=-55 if suund == "Sisenemised" else 55,
+                font=dict(size=10, color=varvus),
+                bgcolor="rgba(255,255,255,0.92)",
+                bordercolor=varvus,
+                borderwidth=1
+            )
+
+
 
 # ------------------------------------------
 # A7/A9 PROGNOOSID DÜNAAMIKAGRAAFIKUL
@@ -2900,17 +3365,42 @@ if sv_naita_sundmusi and not kuupohine.empty:
             text=sv_marks_text, hovertemplate="%{text}<extra></extra>",
             cliponaxis=False,
         ))
-        fig_kuud.update_yaxes(range=[0, sv_ymax * 1.13])
+        fig_kuud.update_yaxes(autorange=True)
         st.caption(
             "◇ Sündmuse algus või ajalooline verstapost; hele taustriba näitab piiritletud perioodi. "
             "Liigu teemandikujulisele markerile, et näha kuupäevi ja kirjeldust. "
             "Sündmused ei tõenda põhjuslikku mõju."
         )
 
+
 fig_kuud.update_layout(
-    xaxis_title="Aeg", yaxis_title="Piiriületuste arv",
-    hovermode="x unified", template="plotly_white", height=470,
+    xaxis_title="Aeg",
+    yaxis_title="Piiriületuste arv",
+    hovermode="x unified",
+    template="plotly_white",
+    height=470,
 )
+
+# X-telg vastab valitud aastatele.
+# Ajaloolised sündmused ei venita enam telge.
+if aastad:
+    x_algus = pd.Timestamp(
+        year=min(aastad), month=1, day=1
+    ) - pd.Timedelta(days=15)
+
+    x_lopp = pd.Timestamp(
+        year=max(aastad), month=12, day=31
+    ) + pd.Timedelta(days=15)
+
+    fig_kuud.update_xaxes(
+        type="date",
+        range=[x_algus, x_lopp],
+        autorange=False,
+        tickformat="%b %Y",
+        showgrid=True
+    )
+
+
 st.plotly_chart(fig_kuud, width="stretch")
 
 # ------------------------------------------
@@ -2931,6 +3421,25 @@ ajavaade = st.segmented_control(
 # HOOAJALISUSE ANDMED – TEGELIKUD + PROGNOOS
 # ------------------------------------------
 
+
+# ------------------------------------------
+# HOOAJALISUS: AINULT TÄIELIKUD TEGELIKUD KUUD
+# ------------------------------------------
+
+# Võtame kuude olemasolu kalendri aluseks,
+# kuid eemaldame sellest osalised kuud.
+hooaja_tais_kuud = {
+    int(aasta): set(kuud_olemas)
+    for aasta, kuud_olemas in saadaolevad_kuud.items()
+}
+
+for info in osalised_kuud.values():
+    aasta = int(info["kuu"].year)
+    kuu = int(info["kuu"].month)
+
+    hooaja_tais_kuud.get(aasta, set()).discard(kuu)
+
+
 # Kuu filter jäetakse hooajalisuse võrdlusest välja.
 # Ülejäänud filtrid kehtivad.
 
@@ -2945,10 +3454,32 @@ for veerg, valitud in valikulised_filtrid.items():
             hooaja_alus[veerg].isin(valitud)
         ]
 
+
+# Osalisi tegelikke kuid ei kasutata hooajalisuses
+# täiskuu mahuna.
+osaline_mask = pd.Series(
+    False,
+    index=hooaja_alus.index
+)
+
+for info in osalised_kuud.values():
+    aasta = int(info["kuu"].year)
+    kuu = int(info["kuu"].month)
+
+    osaline_mask |= (
+        (hooaja_alus["aasta"] == aasta)
+        & (hooaja_alus["kuu"] == kuu)
+    )
+
+hooaja_alus = hooaja_alus.loc[
+    ~osaline_mask
+].copy()
+
+
 # Ainult tegelike andmetega täielikud aastad
 tais_tegelikud_aastad = sorted(
     aasta for aasta in aastad
-    if saadaolevad_kuud.get(aasta, set()) == set(range(1, 13))
+    if hooaja_tais_kuud.get(aasta, set()) == set(range(1, 13))
 )
 
 # Prognoosid kuu- ja kvartalivaatele.
@@ -2972,7 +3503,7 @@ if naita_prognoosi:
     # Väldime tegelike kuude topeltarvestust
     hooaja_prognoos = hooaja_prognoos.loc[
         [
-            kuu not in saadaolevad_kuud.get(aasta, set())
+            kuu not in hooaja_tais_kuud.get(aasta, set())
             for aasta, kuu in zip(
                 hooaja_prognoos["aasta"],
                 hooaja_prognoos["kuu"]
@@ -2992,7 +3523,7 @@ if naita_prognoosi:
     tais_aastad = sorted(
         aasta for aasta in aastad
         if all(
-            kuu in saadaolevad_kuud.get(aasta, set())
+            kuu in hooaja_tais_kuud.get(aasta, set())
             or (aasta, kuu) in prognoositud_kuud
             for kuu in range(1, 13)
         )
@@ -3329,16 +3860,84 @@ erinevus_tegelik["Erinevus"] = (
 
 fig_erinevus = go.Figure()
 
+
 if not erinevus_tegelik.empty:
+
+    # Leiame osalised kuud ja nende viimased
+    # tegelike andmete kuupäevad.
+    osaliste_kuude_info = {}
+
+    for suund, info in osalised_kuud.items():
+        kuu = pd.Timestamp(info["kuu"])
+        viimane_paev = pd.Timestamp(info["viimane_paev"])
+
+        osaliste_kuude_info.setdefault(kuu, {})[
+            suund
+        ] = viimane_paev
+
+    hover_tekstid = []
+    mustrid = []
+
+    for kuu in erinevus_tegelik.index:
+
+        kuu = pd.Timestamp(kuu).to_period("M").to_timestamp()
+
+        if kuu in osaliste_kuude_info:
+
+            info = osaliste_kuude_info[kuu]
+
+            sisse = info.get("Sisenemised")
+            valja = info.get("Väljumised")
+
+            kuupaevad = []
+
+            if sisse is not None:
+                kuupaevad.append(
+                    f"Sisenemised kuni {sisse:%d.%m.%Y}"
+                )
+
+            if valja is not None:
+                kuupaevad.append(
+                    f"Väljumised kuni {valja:%d.%m.%Y}"
+                )
+
+            hover_tekstid.append(
+                "<b>Osaline kuu – tegelikud andmed</b>"
+                + "<br>"
+                + "<br>".join(kuupaevad)
+            )
+
+            mustrid.append("/")
+
+        else:
+            hover_tekstid.append(
+                "Täielik kuu – tegelikud andmed"
+            )
+
+            mustrid.append("")
 
     fig_erinevus.add_trace(
         go.Bar(
             x=erinevus_tegelik.index,
             y=erinevus_tegelik["Erinevus"],
+
             marker_color=[
                 "#178939" if x >= 0 else "#D9534F"
                 for x in erinevus_tegelik["Erinevus"]
             ],
+
+            marker_pattern_shape=mustrid,
+
+            customdata=hover_tekstid,
+
+            hovertemplate=(
+                "<b>%{x|%B %Y}</b>"
+                "<br>Erinevus: %{y:+,.0f}"
+                "<br>%{customdata}"
+                "<extra></extra>"
+            ),
+            width=20 * 24 * 60 * 60 * 1000,
+
             name="Tegelik erinevus"
         )
     )
@@ -3368,6 +3967,11 @@ if naita_prognoosi and not aktiivne_prognoos.empty:
             ]
         ].copy()
 
+        st.write(
+    "DEBUG – kuise erinevuse prognoos:",
+    prog_koond[["Sisenemised", "Väljumised"]]
+)
+
         prog_koond["Erinevus"] = (
             prog_koond["Sisenemised"]
             - prog_koond["Väljumised"]
@@ -3382,9 +3986,37 @@ if naita_prognoosi and not aktiivne_prognoos.empty:
                     for x in prog_koond["Erinevus"]
                 ],
                 marker_pattern_shape="/",
-                name=f"Prognoositud erinevus ({valitud_mudel})"
+                name=f"Prognoositud erinevus ({valitud_mudel})",
+                width=20 * 24 * 60 * 60 * 1000,
             )
         )
+
+# Osalise kuu nähtav märgistus
+for info in osalised_kuud.values():
+
+    kuu = pd.Timestamp(info["kuu"])
+    viimane_paev = pd.Timestamp(info["viimane_paev"])
+
+    if kuu not in erinevus_tegelik.index:
+        continue
+
+    vaartus = float(erinevus_tegelik.loc[kuu, "Erinevus"])
+
+    fig_erinevus.add_annotation(
+        x=kuu,
+        y=vaartus,
+        text=f"Osaline kuu<br>kuni {viimane_paev:%d.%m.%Y}",
+        showarrow=True,
+        arrowhead=2,
+        ax=0,
+        ay=-50,
+        font=dict(size=11),
+        bgcolor="rgba(255,255,255,0.9)",
+        bordercolor="rgba(128,128,128,0.4)",
+        borderwidth=1
+    )
+
+    break
 
 fig_erinevus.add_hline(
     y=0,
@@ -3401,14 +4033,53 @@ fig_erinevus.update_layout(
     barmode="overlay"
 )
 
+
+# ------------------------------------------
+# KUISE ERINEVUSE X-TELJE VAADE
+# ------------------------------------------
+
+erinevuse_kuupaevad = list(erinevus_tegelik.index)
+
+if naita_prognoosi and not prog_koond.empty:
+    erinevuse_kuupaevad.extend(
+        prog_koond.index.tolist()
+    )
+
+if erinevuse_kuupaevad:
+
+    x_algus = (
+        pd.Timestamp(min(erinevuse_kuupaevad))
+        - pd.Timedelta(days=20)
+    ).strftime("%Y-%m-%d")
+
+    x_lopp = (
+        pd.Timestamp(max(erinevuse_kuupaevad))
+        + pd.Timedelta(days=35)
+    ).strftime("%Y-%m-%d")
+
+    fig_erinevus.update_xaxes(
+        type="date",
+        range=[x_algus, x_lopp],
+        autorange=False,
+        tickformat="%b %Y"
+    )
+
+st.write("DEBUG – erinevuse X-telg:", fig_erinevus.layout.xaxis.range)
+
 st.plotly_chart(fig_erinevus, width="stretch")
 
-st.caption(
-    "2026. aasta tegelikud andmed lõpevad oktoobriga. "
-    "2026. aasta novembri ja detsembri ning 2027. aasta "
-    "väärtused põhinevad valitud A7/A9 prognoosimudelil, "
-    "kui prognoos on sisse lülitatud."
-)
+if osalised_kuud:
+    viimane_paev = max(
+        info["viimane_paev"]
+        for info in osalised_kuud.values()
+    )
+
+    st.caption(
+        f"PPA tegelikud andmed ulatuvad {viimane_paev:%d.%m.%Y}. "
+        "Viimane kuu on osaline. "
+        "Tulevaste kuude väärtused põhinevad valitud "
+        "A7/A9 prognoosimudelil, kui prognoos on sisse lülitatud."
+    )
 
 
 # ------------------------------------------
