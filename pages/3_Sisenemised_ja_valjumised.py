@@ -3966,12 +3966,7 @@ if naita_prognoosi and not aktiivne_prognoos.empty:
                 for kuu in prog_koond.index
             ]
         ].copy()
-
-        st.write(
-    "DEBUG – kuise erinevuse prognoos:",
-    prog_koond[["Sisenemised", "Väljumised"]]
-)
-
+  
         prog_koond["Erinevus"] = (
             prog_koond["Sisenemised"]
             - prog_koond["Väljumised"]
@@ -4063,8 +4058,6 @@ if erinevuse_kuupaevad:
         autorange=False,
         tickformat="%b %Y"
     )
-
-st.write("DEBUG – erinevuse X-telg:", fig_erinevus.layout.xaxis.range)
 
 st.plotly_chart(fig_erinevus, width="stretch")
 
