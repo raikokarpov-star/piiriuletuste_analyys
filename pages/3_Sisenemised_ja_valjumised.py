@@ -405,6 +405,35 @@ def ppa_andmeseis_tekstina():
 
 
 
+# ------------------------------------------
+# AASTAFILTRI JA PROGNOOSI SÜNKRONISEERIMINE
+# ------------------------------------------
+
+def sv_aasta_muutus():
+    valitud_aastad = st.session_state.get("sv_aastad", [])
+    st.session_state["sv_naita_prognoosi"] = (
+        2027 in valitud_aastad
+    )
+
+
+def sv_prognoosi_muutus():
+    valitud_aastad = list(
+        st.session_state.get("sv_aastad", [])
+    )
+
+    if st.session_state.get("sv_naita_prognoosi", False):
+        if 2027 not in valitud_aastad:
+            valitud_aastad.append(2027)
+    else:
+        valitud_aastad = [
+            aasta for aasta in valitud_aastad
+            if aasta != 2027
+        ]
+
+    st.session_state["sv_aastad"] = sorted(
+        valitud_aastad
+    )
+
 
 # ------------------------------------------
 # FILTRID
@@ -445,12 +474,16 @@ with sticky_riba:
         }
 
         # AASTA
+        
         with f1:
             aastad = st.multiselect(
                 "Aasta",
                 options=aastate_valikud,
-                default=[a for a in aastate_valikud if a <= 2026],
-                key="sv_aastad"
+                default=[
+                    a for a in aastate_valikud if a <= 2026
+                ],
+                key="sv_aastad",
+                on_change=sv_aasta_muutus
             )
 
         # KUU
@@ -659,8 +692,9 @@ valitud_mudel = st.radio(
 
 naita_prognoosi = st.toggle(
     "Kuva prognoos graafikutel",
-    value=True,
-    key="sv_naita_prognoosi"
+    value=False,
+    key="sv_naita_prognoosi",
+    on_change=sv_prognoosi_muutus
 )
 
 
@@ -1381,21 +1415,110 @@ if osaline_vordlusperioodis:
             "võrdlus ei hõlma 12 täielikku kuud."
         )
 
+    
     else:
 
-        # Säilitame senise kaitse olukorras,
-        # kus prognoosipõhist võrdlust ei tehta.
-        for moodikud in (sis_m, val_m):
+        # Ajalooliste aastate võrdlus:
+        # kasutame ainult mõlemas aastas täielikke kuid.
+        def uhised_taiskuud(aasta1, aasta2):
+            tulem = (
+                set(kuud)
+                & set(saadaolevad_kuud.get(aasta1, set()))
+                & set(saadaolevad_kuud.get(aasta2, set()))
+            )
+
+            for info in osalised_kuud.values():
+                if info["kuu"].year in (aasta1, aasta2):
+                    tulem.discard(int(info["kuu"].month))
+
+            return sorted(tulem)
+
+        def tegelik_maht(suund, aasta, kuude_valik):
+            mask = (
+                (andmed["Suund"] == suund)
+                & (andmed["aasta"] == aasta)
+                & andmed["kuu"].isin(kuude_valik)
+                & andmed["Piiripunkti tüüp"].isin(piirityybid)
+            )
+
+            filtrid = {
+                "Piiripunkt": piiripunktid,
+                "Riikide grupp": riikide_grupid,
+                "Kodakondsus": kodakondsused,
+                "Sugu": sood,
+                "Vanuserühm": vanused,
+            }
+
+            for veerg, valitud in filtrid.items():
+                if valitud:
+                    mask &= andmed[veerg].isin(valitud)
+
+            return andmed.loc[
+                mask, "Piiriületuste arv"
+            ].sum()
+
+        esimene = min(aastad)
+        viimane = max(aastad)
+
+        for suund, moodikud in [
+            ("Sisenemised", sis_m),
+            ("Väljumised", val_m),
+        ]:
+
             moodikud["muutus"] = None
             moodikud["cagr"] = None
             moodikud["yoy"] = None
             moodikud["muutus_12k"] = None
 
+            if esimene < viimane:
+                kasvukuud = uhised_taiskuud(
+                    esimene, viimane
+                )
+
+                if kasvukuud:
+                    vana = tegelik_maht(
+                        suund, esimene, kasvukuud
+                    )
+                    uus = tegelik_maht(
+                        suund, viimane, kasvukuud
+                    )
+
+                    moodikud["muutus"] = protsendimuutus(
+                        uus, vana
+                    )
+
+                    if vana > 0 and uus > 0:
+                        moodikud["cagr"] = (
+                            (uus / vana)
+                            ** (1 / (viimane - esimene))
+                            - 1
+                        ) * 100
+
+            # YoY: viimane valitud aasta vs eelmine aasta
+            yoy_kuud = uhised_taiskuud(
+                viimane - 1, viimane
+            )
+
+            if yoy_kuud:
+                vana = tegelik_maht(
+                    suund, viimane - 1, yoy_kuud
+                )
+                uus = tegelik_maht(
+                    suund, viimane, yoy_kuud
+                )
+
+                moodikud["yoy"] = protsendimuutus(
+                    uus, vana
+                )
+
         st.info(
-            "Valitud periood sisaldab osalist kuud. "
-            "Kasvuvõrdlusi ei kuvata, sest perioodid "
-            "ei ole täielikult võrreldavad."
+            "Kasvuvõrdlustes kasutatakse ainult mõlemas "
+            "võrreldavas aastas täielikke kuid. "
+            "2026. aasta osalist novembrit ja puuduvat "
+            "detsembrit kasvunäitajatesse ei arvestata. "
+            "Kogumahud ja graafikud jäävad muutmata."
         )
+
 
 
 # ------------------------------------------
@@ -1689,41 +1812,59 @@ with sticky_riba:
 
             vordluskuude_arv = len(vordluskuud)
 
-        # Kasvuvõrdluses arvestatavate kuude arv
-        vordluskuud = set(kuud)
+        
+        # Võrreldavate kuude arv ja selgitus
+        if aastad:
+            esimene_aasta = min(aastad)
+            viimane_aasta = max(aastad)
 
-        if naita_prognoosi and 2027 in aastad:
-            osaliste_kuude_numbrid = {
-                int(info["kuu"].month)
-                for info in osalised_kuud.values()
-                if int(info["kuu"].year) == 2026
-            }
+            if naita_prognoosi and viimane_aasta == 2027:
+                vordluskuud = set(kuud)
 
-            vordluskuud -= osaliste_kuude_numbrid
+                for info in osalised_kuud.values():
+                    if info["kuu"].year == 2026:
+                        vordluskuud.discard(int(info["kuu"].month))
 
-        vordluskuude_arv = len(vordluskuud)
-        st.markdown(
-            f"""
-            <div style="
-                padding: 4px 14px 12px 14px;
-                font-size: 13px;
-                color: #7D8997;
-                line-height: 1.7;
-            ">
-                2027. aasta prognoos põhineb mudelil <b>{valitud_mudel}</b>.
-                Kasvuvõrdluse kuude arv: <b>{vordluskuude_arv}</b>.
-                Mõlemal aastal võrreldakse samu kuid.
-                Osaline november 2026 jäetakse vajaduse korral
-                mõlema aasta kasvuvõrdlusest välja.
-                Viimase 12 kuu muutust ei kuvata, kui võrdluses
-                puudub mõni täielik kuu.
-                Kogumahud ja TOP 3 piiripunkti osakaal arvestavad
-                kõiki valitud perioodi olemasolevaid andmeid.
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+                allika_selgitus = (
+                    f"2027. aasta väärtused põhinevad "
+                    f"{valitud_mudel} prognoosimudelil. "
+                )
+            else:
+                vordluskuud = (
+                    set(kuud)
+                    & set(saadaolevad_kuud.get(esimene_aasta, set()))
+                    & set(saadaolevad_kuud.get(viimane_aasta, set()))
+                )
 
+                for info in osalised_kuud.values():
+                    if info["kuu"].year in (esimene_aasta, viimane_aasta):
+                        vordluskuud.discard(int(info["kuu"].month))
+
+                allika_selgitus = (
+                    "Kasvuvõrdlus põhineb PPA tegelikel andmetel. "
+                )
+
+            vordluskuude_arv = len(vordluskuud)
+
+            st.markdown(
+                f"""
+                <div style="
+                    padding: 4px 14px 12px 14px;
+                    font-size: 13px;
+                    color: #7D8997;
+                    line-height: 1.7;
+                ">
+                    {allika_selgitus}
+                    Kasvuvõrdluse kuude arv:
+                    <b>{vordluskuude_arv}</b>.
+                    Võrreldakse samu kalendrikuusid ning osaline
+                    november 2026 jäetakse vajaduse korral välja.
+                    Kogumahud ja TOP 3 piiripunkti osakaal arvestavad
+                    kõiki valitud perioodi olemasolevaid andmeid.
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
         vordlus = pd.DataFrame({
             "Mõõdik": [
