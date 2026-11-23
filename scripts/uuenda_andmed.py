@@ -80,7 +80,7 @@ def lae_csv(info, aasta):
     df["aasta"] = df["Piiriületuse kpv"].dt.year
     df["kuu"] = df["Piiriületuse kpv"].dt.month
     df["paev"] = df["Piiriületuse kpv"].dt.day
-    df["nadalapaev"] = df["Piiriületuse kpv"].dt.dayofweek
+    df["nadalapaev"] = df["Piiriületuse kpv"].dt.day_of_week
     df["nadal"] = df["Piiriületuse kpv"].dt.isocalendar().week.astype(int)
 
     print(
