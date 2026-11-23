@@ -1602,35 +1602,53 @@ def lyhi_arv(arv):
 # YOY MÕÕDIKU NIMETUS
 # ------------------------------------------
 
-# YoY selgitus vastavalt võrdluse aluseks olevatele kuudele
-if osaline_vordlusperioodis and naita_prognoosi and 2027 in aastad:
 
-    osaliste_kuude_numbrid = {
-        int(info["kuu"].month)
-        for info in osalised_kuud.values()
-        if int(info["kuu"].year) == 2026
-    }
+# YoY nimetus tegelikult võrreldavate kuude järgi
 
-    vordluskuude_arv = len(
-        set(kuud) - osaliste_kuude_numbrid
-    )
+if osaline_vordlusperioodis and aastad:
 
-    yoy_silt = f"YoY ({vordluskuude_arv} võrreldavat kuud)"
+    viimane_aasta = max(aastad)
+    eelmine_aasta = viimane_aasta - 1
 
-elif osaline_vordlusperioodis:
+    # Kui võrdleme 2027. aasta prognoosi 2026. aastaga,
+    # jätame välja 2026. aasta osalise novembri.
+    if naita_prognoosi and viimane_aasta == 2027:
 
-    yoy_silt = "YoY (osaline kuu)"
+        vordluskuud = set(kuud)
 
-elif naita_prognoosi and aastad and max(aastad) >= 2026:
+        for info in osalised_kuud.values():
+            if int(info["kuu"].year) == 2026:
+                vordluskuud.discard(int(info["kuu"].month))
 
+    else:
+        # Ajaloolised võrdlused: ainult mõlemas
+        # võrreldavas aastas olemasolevad täielikud kuud.
+        vordluskuud = (
+            set(kuud)
+            & set(saadaolevad_kuud.get(eelmine_aasta, set()))
+            & set(saadaolevad_kuud.get(viimane_aasta, set()))
+        )
+
+        for info in osalised_kuud.values():
+            if int(info["kuu"].year) in (
+                eelmine_aasta, viimane_aasta
+            ):
+                vordluskuud.discard(int(info["kuu"].month))
+
+    vordluskuude_arv = len(vordluskuud)
+
+    if vordluskuude_arv:
+        yoy_silt = f"YoY ({vordluskuude_arv} võrreldavat kuud)"
+    else:
+        yoy_silt = "YoY"
+
+elif naita_prognoosi and 2027 in aastad:
     yoy_silt = "YoY (sh prognoos)"
 
 else:
-
     yoy_silt = "YoY"
 
-if osaline_vordlusperioodis:
-    yoy_silt = "YoY (osaline kuu)"
+
 
 with moodikute_koht.container():
 
@@ -4221,7 +4239,13 @@ if not erinevus_tegelik.empty:
         )
     )
 
+
 # Valitud mudeli prognoositud erinevus
+
+# Muutuja peab olemas olema ka siis,
+# kui prognoos on välja lülitatud.
+prog_koond = pd.DataFrame(columns=["Erinevus"])
+
 if naita_prognoosi and not aktiivne_prognoos.empty:
 
     prog_koond = (
@@ -4232,7 +4256,7 @@ if naita_prognoosi and not aktiivne_prognoos.empty:
         .sort_index()
     )
 
-    # Puuduva suuna korral ei eelda me nullprognoosi
+    # Mõlemad liikumissuunad peavad olema olemas.
     if {"Sisenemised", "Väljumised"}.issubset(
         prog_koond.columns
     ):
@@ -4245,39 +4269,47 @@ if naita_prognoosi and not aktiivne_prognoos.empty:
                 for kuu in prog_koond.index
             ]
         ].copy()
-  
+
         prog_koond["Erinevus"] = (
             prog_koond["Sisenemised"]
             - prog_koond["Väljumised"]
         )
 
-        
+    else:
+        prog_koond = pd.DataFrame(columns=["Erinevus"])
+
+
 # Prognoositud erinevus – positiivsed ja negatiivsed eraldi
-for tingimus, varvus, nimetus in [
-    (prog_koond["Erinevus"] >= 0, "#178939", "Positiivne"),
-    (prog_koond["Erinevus"] < 0, "#D9534F", "Negatiivne"),
-]:
+if not prog_koond.empty:
 
-    osa = prog_koond.loc[tingimus].copy()
+    for tingimus, varvus, nimetus in [
+        (prog_koond["Erinevus"] >= 0, "#178939", "Positiivne"),
+        (prog_koond["Erinevus"] < 0, "#D9534F", "Negatiivne"),
+    ]:
 
-    if osa.empty:
-        continue
+        osa = prog_koond.loc[tingimus].copy()
 
-    fig_erinevus.add_trace(
-        go.Bar(
-            x=osa.index,
-            y=osa["Erinevus"],
-            marker_color=varvus,
-            marker_pattern_shape=".",
-            name=f"Prognoositud erinevus ({valitud_mudel}) – {nimetus.lower()}",
-            width=20 * 24 * 60 * 60 * 1000,
-            hovertemplate=(
-                "<b>%{x|%m.%Y}</b>"
-                "<br>Prognoositud erinevus: %{y:+,.0f}"
-                "<extra></extra>"
-            ),
+        if osa.empty:
+            continue
+
+        fig_erinevus.add_trace(
+            go.Bar(
+                x=osa.index,
+                y=osa["Erinevus"],
+                marker_color=varvus,
+                marker_pattern_shape=".",
+                name=(
+                    f"Prognoositud erinevus ({valitud_mudel}) "
+                    f"– {nimetus.lower()}"
+                ),
+                width=20 * 24 * 60 * 60 * 1000,
+                hovertemplate=(
+                    "<b>%{x|%m.%Y}</b>"
+                    "<br>Prognoositud erinevus: %{y:+,.0f}"
+                    "<extra></extra>"
+                ),
+            )
         )
-    )
 
 
 # Osalise kuu nähtav märgistus
