@@ -955,13 +955,19 @@ val_m = arvuta_moodikud(val_df)
 # KASVUNÄITAJAD KOOS PROGNOOSIGA
 # ------------------------------------------
 
-def aasta_maht_koos_prognoosiga(suund, aasta):
+def aasta_maht_koos_prognoosiga(suund, aasta, kuud_arvestuseks=None):
+
+    kuud_kasutusel = (
+        list(kuud)
+        if kuud_arvestuseks is None
+        else list(kuud_arvestuseks)
+    )
 
     # Tegelikud andmed, kasutades samu detailfiltreid
     m = (
         (andmed["Suund"] == suund)
         & (andmed["aasta"] == aasta)
-        & andmed["kuu"].isin(kuud)
+        & andmed["kuu"].isin(kuud_kasutusel)
         & andmed["Piiripunkti tüüp"].isin(piirityybid)
     )
 
@@ -984,7 +990,7 @@ def aasta_maht_koos_prognoosiga(suund, aasta):
 
     # Prognoosi kasutame ainult kuudel,
     # mille tegelikud andmed veel puuduvad
-    prognoosi_kuud = set(kuud) - olemasolevad_kuud
+    prognoosi_kuud = set(kuud_kasutusel) - olemasolevad_kuud
 
     # Kasutame täielikku prognoositabelit,
     # mitte aastafiltriga piiratud aktiivset prognoosi.
@@ -1010,7 +1016,7 @@ def aasta_maht_koos_prognoosiga(suund, aasta):
         | set(p["kuu"].unique())
     )
 
-    if not set(kuud).issubset(kaetud_kuud):
+    if not set(kuud_kasutusel).issubset(kaetud_kuud):
         return None
 
     return (
@@ -1300,25 +1306,97 @@ osaline_vordlusperioodis = any(
     for info in osalised_kuud.values()
 )
 
+
 if osaline_vordlusperioodis:
 
-    for moodikud in (sis_m, val_m):
+    if naita_prognoosi and 2027 in aastad:
 
-        # Osalise perioodiga kasvuvõrdlusi
-        # ei esitata lõplike tulemustena.
-        moodikud["muutus"] = None
-        moodikud["cagr"] = None
-        moodikud["yoy"] = None
-        moodikud["muutus_12k"] = None
+        # Kasvuvõrdluses välistame osalise kuu
+        # mõlemast võrreldavast aastast.
+        osaliste_kuude_numbrid = {
+            int(info["kuu"].month)
+            for info in osalised_kuud.values()
+            if int(info["kuu"].year) == 2026
+        }
 
-    st.info(
-        "Valitud võrdlusperiood sisaldab osalist kuud. "
-        "Tegelikud PPA andmed on saadaval kuni "
-        f"{max(info['viimane_paev'] for info in osalised_kuud.values()):%d.%m.%Y}. "
-        "Kasvuvõrdlusi (muutus, CAGR, YoY ja viimase "
-        "12 kuu muutus) ei kuvata, sest perioodid "
-        "ei ole täielikult võrreldavad."
-    )
+        kasvukuud = [
+            kuu for kuu in kuud
+            if kuu not in osaliste_kuude_numbrid
+        ]
+
+        for suund, moodikud in [
+            ("Sisenemised", sis_m),
+            ("Väljumised", val_m),
+        ]:
+
+            moodikud["muutus"] = None
+            moodikud["cagr"] = None
+            moodikud["yoy"] = None
+            moodikud["muutus_12k"] = None
+
+            if not kasvukuud:
+                continue
+
+            viimane = max(aastad)
+            esimene = min(aastad)
+
+            uus = aasta_maht_koos_prognoosiga(
+                suund, viimane, kasvukuud
+            )
+
+            eelmine = aasta_maht_koos_prognoosiga(
+                suund, viimane - 1, kasvukuud
+            )
+
+            if uus is not None and eelmine is not None:
+                moodikud["yoy"] = protsendimuutus(
+                    uus, eelmine
+                )
+
+            if len(set(aastad)) >= 2:
+
+                vana = aasta_maht_koos_prognoosiga(
+                    suund, esimene, kasvukuud
+                )
+
+                if vana is not None and uus is not None:
+
+                    moodikud["muutus"] = protsendimuutus(
+                        uus, vana
+                    )
+
+                    if vana > 0 and uus > 0:
+                        moodikud["cagr"] = (
+                            (uus / vana)
+                            ** (1 / (viimane - esimene))
+                            - 1
+                        ) * 100
+
+        st.info(
+            "Kasvuvõrdlustes on osaline november 2026 "
+            "mõlemast võrreldavast aastast välja jäetud. "
+            "Üldmahud ja graafikud sisaldavad jätkuvalt "
+            "valitud perioodi kõiki olemasolevaid andmeid. "
+            "Viimase 12 kuu muutust ei kuvata, sest "
+            "võrdlus ei hõlma 12 täielikku kuud."
+        )
+
+    else:
+
+        # Säilitame senise kaitse olukorras,
+        # kus prognoosipõhist võrdlust ei tehta.
+        for moodikud in (sis_m, val_m):
+            moodikud["muutus"] = None
+            moodikud["cagr"] = None
+            moodikud["yoy"] = None
+            moodikud["muutus_12k"] = None
+
+        st.info(
+            "Valitud periood sisaldab osalist kuud. "
+            "Kasvuvõrdlusi ei kuvata, sest perioodid "
+            "ei ole täielikult võrreldavad."
+        )
+
 
 # ------------------------------------------
 # KOMPAKTSED PÕHINÄITAJAD
@@ -1401,13 +1479,32 @@ def lyhi_arv(arv):
 # YOY MÕÕDIKU NIMETUS
 # ------------------------------------------
 
-yoy_silt = (
-    "YoY (sh prognoos)"
-    if naita_prognoosi
-    and aastad
-    and max(aastad) >= 2026
-    else "YoY"
-)
+# YoY selgitus vastavalt võrdluse aluseks olevatele kuudele
+if osaline_vordlusperioodis and naita_prognoosi and 2027 in aastad:
+
+    osaliste_kuude_numbrid = {
+        int(info["kuu"].month)
+        for info in osalised_kuud.values()
+        if int(info["kuu"].year) == 2026
+    }
+
+    vordluskuude_arv = len(
+        set(kuud) - osaliste_kuude_numbrid
+    )
+
+    yoy_silt = f"YoY ({vordluskuude_arv} võrreldavat kuud)"
+
+elif osaline_vordlusperioodis:
+
+    yoy_silt = "YoY (osaline kuu)"
+
+elif naita_prognoosi and aastad and max(aastad) >= 2026:
+
+    yoy_silt = "YoY (sh prognoos)"
+
+else:
+
+    yoy_silt = "YoY"
 
 if osaline_vordlusperioodis:
     yoy_silt = "YoY (osaline kuu)"
@@ -1578,14 +1675,43 @@ with sticky_riba:
         expanded=False
     ):
         if naita_prognoosi and 2027 in aastad:
-            st.caption(
-                f"2027. aasta näitajad põhinevad {valitud_mudel} "
-                "prognoosil. Võrdlusandmetes kasutatakse "
-                "tegelikke väärtusi ja puuduvate tulevikukuude "
-                "jaoks prognoosi. Viimase 12 kuu muutus "
-                "võrdleb 2027. aastat 2026. aastaga ning "
-                "kuvatakse ainult kõigi 12 kuu valimisel."
+            # Kasvuvõrdluses kasutatavate kuude arv
+            osaliste_kuude_numbrid = {
+                int(info["kuu"].month)
+                for info in osalised_kuud.values()
+                if int(info["kuu"].year) == 2026
+            }
+
+            if naita_prognoosi and 2027 in aastad:
+                vordluskuud = set(kuud) - osaliste_kuude_numbrid
+            else:
+                vordluskuud = set(kuud)
+
+            vordluskuude_arv = len(vordluskuud)
+
+            
+        st.markdown(
+            f"""
+            <div style="
+                padding: 4px 14px 12px 14px;
+                font-size: 13px;
+                color: #7D8997;
+                line-height: 1.7;
+            ">
+                2027. aasta prognoos põhineb mudelil <b>{valitud_mudel}</b>.
+                Kasvuvõrdluse kuude arv: <b>{vordluskuude_arv}</b>.
+                Mõlemal aastal võrreldakse samu kuid.
+                Osaline november 2026 jäetakse vajaduse korral
+                mõlema aasta kasvuvõrdlusest välja.
+                Viimase 12 kuu muutust ei kuvata, kui võrdluses
+                puudub mõni täielik kuu.
+                Kogumahud ja TOP 3 piiripunkti osakaal arvestavad
+                kõiki valitud perioodi olemasolevaid andmeid.
+            </div>
+            """,
+            unsafe_allow_html=True
         )
+
 
         vordlus = pd.DataFrame({
             "Mõõdik": [
@@ -3972,19 +4098,34 @@ if naita_prognoosi and not aktiivne_prognoos.empty:
             - prog_koond["Väljumised"]
         )
 
-        fig_erinevus.add_trace(
-            go.Bar(
-                x=prog_koond.index,
-                y=prog_koond["Erinevus"],
-                marker_color=[
-                    "#178939" if x >= 0 else "#D9534F"
-                    for x in prog_koond["Erinevus"]
-                ],
-                marker_pattern_shape="/",
-                name=f"Prognoositud erinevus ({valitud_mudel})",
-                width=20 * 24 * 60 * 60 * 1000,
-            )
+        
+# Prognoositud erinevus – positiivsed ja negatiivsed eraldi
+for tingimus, varvus, nimetus in [
+    (prog_koond["Erinevus"] >= 0, "#178939", "Positiivne"),
+    (prog_koond["Erinevus"] < 0, "#D9534F", "Negatiivne"),
+]:
+
+    osa = prog_koond.loc[tingimus].copy()
+
+    if osa.empty:
+        continue
+
+    fig_erinevus.add_trace(
+        go.Bar(
+            x=osa.index,
+            y=osa["Erinevus"],
+            marker_color=varvus,
+            marker_pattern_shape=".",
+            name=f"Prognoositud erinevus ({valitud_mudel}) – {nimetus.lower()}",
+            width=20 * 24 * 60 * 60 * 1000,
+            hovertemplate=(
+                "<b>%{x|%m.%Y}</b>"
+                "<br>Prognoositud erinevus: %{y:+,.0f}"
+                "<extra></extra>"
+            ),
         )
+    )
+
 
 # Osalise kuu nähtav märgistus
 for info in osalised_kuud.values():
@@ -4194,9 +4335,13 @@ else:
     )
     st.plotly_chart(fig_heat, width="stretch")
 
+
 st.caption(
-    "2026. aasta tegelikud andmed lõpevad oktoobriga. "
-    "2026. aasta novembri ja detsembri ning 2027. aasta "
-    "väärtused põhinevad valitud A7/A9 prognoosimudelil, "
-    "kui prognoos on sisse lülitatud."
+    "PPA tegelikud andmed ulatuvad 18.11.2026-ni. "
+    "November 2026 on osaline kuu ja viimane täielik kuu "
+    "on oktoober 2026. Alates detsembrist 2026 "
+    "kasutatakse valitud A7/A9 prognoosimudeli tulemusi, "
+    "kui prognoos on sisse lülitatud. "
+    "Prognoos ei asenda ega dubleeri olemasolevaid tegelikke andmeid."
 )
+
