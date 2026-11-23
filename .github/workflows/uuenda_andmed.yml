@@ -1,0 +1,82 @@
+
+name: PPA andmete automaatne uuendamine
+
+on:
+  schedule:
+    # Igal neljapäeval kell 12:00 Eesti aja järgi
+    - cron: "0 12 * * 4"
+      timezone: "Europe/Tallinn"
+
+  # Võimaldab käivitada ka käsitsi
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ppa-andmete-uuendamine
+  cancel-in-progress: false
+
+jobs:
+  uuenda:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Laadi repositoorium
+        uses: actions/checkout@v4
+        with:
+          ref: MAIN_RK
+
+      - name: Seadista Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Paigalda vajalikud teegid
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas pyarrow
+
+      - name: Kontrolli toetatud aastat
+        run: |
+          python - <<'PY'
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          aasta = datetime.now(
+              ZoneInfo("Europe/Tallinn")
+          ).year
+
+          if aasta != 2026:
+              raise SystemExit(
+                  "Automaatika peatatud: skript vajab "
+                  f"{aasta}. aasta andmete tuge."
+              )
+          PY
+
+      - name: Uuenda Parquet-failid
+        run: python scripts/uuenda_andmed.py --publish
+
+      - name: Kontrolli muudatusi
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet -- streamlit_andmed/; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Salvesta ja saada GitHubi
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add streamlit_andmed/*.parquet
+          git commit -m "Uuenda PPA piiriuletuste andmed"
+          git push origin HEAD:MAIN_RK
+
+      - name: Muudatusi ei olnud
+        if: steps.changes.outputs.changed == 'false'
+        run: echo "Andmed on ajakohased. Commit pole vajalik."
