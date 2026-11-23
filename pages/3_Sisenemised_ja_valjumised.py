@@ -1689,7 +1689,19 @@ with sticky_riba:
 
             vordluskuude_arv = len(vordluskuud)
 
-            
+        # Kasvuvõrdluses arvestatavate kuude arv
+        vordluskuud = set(kuud)
+
+        if naita_prognoosi and 2027 in aastad:
+            osaliste_kuude_numbrid = {
+                int(info["kuu"].month)
+                for info in osalised_kuud.values()
+                if int(info["kuu"].year) == 2026
+            }
+
+            vordluskuud -= osaliste_kuude_numbrid
+
+        vordluskuude_arv = len(vordluskuud)
         st.markdown(
             f"""
             <div style="
